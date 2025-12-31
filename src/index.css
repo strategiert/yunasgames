@@ -2,7 +2,91 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
   margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  overflow: hidden;
+}
+
+/* Desktop: Zentrierter Handy-Frame */
+@media (min-width: 768px) {
+  body {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  #root {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .app-frame {
+    width: min(420px, 90vw);
+    height: min(746px, 95vh); /* 9:16 Ratio */
+    border-radius: 40px;
+    overflow: hidden;
+    box-shadow:
+      0 0 0 12px #1a1a1a,
+      0 0 0 14px #333,
+      0 25px 50px -12px rgba(0, 0, 0, 0.5),
+      0 0 100px rgba(100, 150, 255, 0.15);
+    position: relative;
+  }
+
+  .app-frame::before {
+    content: '';
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 80px;
+    height: 6px;
+    background: #333;
+    border-radius: 3px;
+    z-index: 9999;
+  }
+
+  .app-frame-inner {
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+}
+
+/* Mobile: Vollbild */
+@media (max-width: 767px) {
+  .app-frame {
+    width: 100%;
+    height: 100%;
+  }
+
+  .app-frame-inner {
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+}
+
+/* Scrollbar verstecken aber funktional halten */
+.app-frame-inner {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.app-frame-inner::-webkit-scrollbar {
+  display: none;
 }

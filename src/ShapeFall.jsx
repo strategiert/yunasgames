@@ -1,178 +1,308 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 
 const GAME_WIDTH = 350;
-const GAME_HEIGHT = 500;
-const CATCHER_WIDTH = 80;
-const CATCHER_HEIGHT = 15;
-const SHAPE_SIZE = 30;
+const GAME_HEIGHT = 550;
+const CATCHER_WIDTH = 70;
+const CATCHER_HEIGHT = 50;
+const ITEM_SIZE = 40;
 
-const COLORS = {
-  CIRCLE: '#00FFFF',    // Cyan
-  SQUARE: '#FF00FF',    // Magenta
-  BG: '#1a1a1a',
-  GLOW_CIRCLE: '0 0 20px #00FFFF, 0 0 40px #00FFFF',
-  GLOW_SQUARE: '0 0 20px #FF00FF, 0 0 40px #FF00FF',
+// Items die fallen können
+const ITEMS = {
+  good: [
+    { emoji: '🦴', name: 'Knochen', points: 10 },
+    { emoji: '🍖', name: 'Leckerli', points: 15 },
+    { emoji: '❤️', name: 'Herz', points: 20 },
+    { emoji: '⭐', name: 'Stern', points: 25 },
+    { emoji: '🎾', name: 'Ball', points: 10 },
+  ],
+  bad: [
+    { emoji: '🧦', name: 'Stinkesocke', points: -20 },
+    { emoji: '👟', name: 'Alter Schuh', points: -15 },
+    { emoji: '🥦', name: 'Brokkoli', points: -10 },
+  ],
+  powerup: [
+    { emoji: '🧲', name: 'Magnet', effect: 'magnet', duration: 5000 },
+    { emoji: '✨', name: 'Doppelt', effect: 'double', duration: 5000 },
+    { emoji: '🛡️', name: 'Schild', effect: 'shield', duration: 1 },
+  ],
 };
 
 const ShapeFall = ({ onClose, onWin }) => {
   const [gameState, setGameState] = useState('ready'); // ready, playing, gameover
   const [score, setScore] = useState(0);
-  const [highScore, setHighScore] = useState(0);
-  const [catcherMode, setCatcherMode] = useState('circle'); // circle oder square
-  const [shapes, setShapes] = useState([]);
+  const [highScore, setHighScore] = useState(() => {
+    const saved = localStorage.getItem('leckerliFangen_highscore');
+    return saved ? parseInt(saved) : 0;
+  });
+  const [lives, setLives] = useState(3);
+  const [catcherX, setCatcherX] = useState(GAME_WIDTH / 2 - CATCHER_WIDTH / 2);
+  const [items, setItems] = useState([]);
   const [particles, setParticles] = useState([]);
-  const [catcherEffect, setCatcherEffect] = useState(null); // 'success', 'fail'
   const [combo, setCombo] = useState(0);
-  const [speed, setSpeed] = useState(2);
+  const [activeEffects, setActiveEffects] = useState({}); // { magnet: true, double: true, shield: 1 }
+  const [lastCatch, setLastCatch] = useState(null); // Für Animations-Feedback
+  const [speed, setSpeed] = useState(2.5);
 
   const gameLoopRef = useRef(null);
   const spawnTimerRef = useRef(null);
   const lastTimeRef = useRef(0);
+  const gameAreaRef = useRef(null);
+  const isDragging = useRef(false);
 
-  // Catcher umschalten
-  const toggleCatcher = useCallback(() => {
+  // Touch/Mouse Handler für Catcher-Bewegung
+  const handleMove = useCallback((clientX) => {
     if (gameState !== 'playing') return;
-    setCatcherMode(m => m === 'circle' ? 'square' : 'circle');
+
+    const gameArea = gameAreaRef.current;
+    if (!gameArea) return;
+
+    const rect = gameArea.getBoundingClientRect();
+    const relativeX = clientX - rect.left;
+    const newX = Math.max(0, Math.min(GAME_WIDTH - CATCHER_WIDTH, relativeX - CATCHER_WIDTH / 2));
+    setCatcherX(newX);
   }, [gameState]);
 
-  // Tastatur-Events
+  const handleMouseMove = useCallback((e) => {
+    if (isDragging.current) {
+      handleMove(e.clientX);
+    }
+  }, [handleMove]);
+
+  const handleTouchMove = useCallback((e) => {
+    e.preventDefault();
+    if (e.touches.length > 0) {
+      handleMove(e.touches[0].clientX);
+    }
+  }, [handleMove]);
+
+  const handleMouseDown = (e) => {
+    isDragging.current = true;
+    handleMove(e.clientX);
+  };
+
+  const handleMouseUp = () => {
+    isDragging.current = false;
+  };
+
+  const handleTouchStart = (e) => {
+    if (e.touches.length > 0) {
+      handleMove(e.touches[0].clientX);
+    }
+  };
+
+  // Tastatur-Steuerung
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'ArrowDown') {
-        e.preventDefault();
-        if (gameState === 'ready') {
-          startGame();
-        } else {
-          toggleCatcher();
-        }
+      if (gameState !== 'playing') return;
+
+      if (e.code === 'ArrowLeft') {
+        setCatcherX(x => Math.max(0, x - 30));
+      } else if (e.code === 'ArrowRight') {
+        setCatcherX(x => Math.min(GAME_WIDTH - CATCHER_WIDTH, x + 30));
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [gameState, toggleCatcher]);
+    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('mousemove', handleMouseMove);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('mousemove', handleMouseMove);
+    };
+  }, [gameState, handleMouseMove]);
 
   // Spiel starten
   const startGame = () => {
     setGameState('playing');
     setScore(0);
-    setShapes([]);
+    setLives(3);
+    setItems([]);
     setParticles([]);
     setCombo(0);
-    setSpeed(2);
-    setCatcherMode('circle');
+    setSpeed(2.5);
+    setActiveEffects({});
+    setCatcherX(GAME_WIDTH / 2 - CATCHER_WIDTH / 2);
   };
 
-  // Neue Form spawnen
-  const spawnShape = useCallback(() => {
+  // Zufälliges Item spawnen
+  const spawnItem = useCallback(() => {
     if (gameState !== 'playing') return;
 
-    const type = Math.random() > 0.5 ? 'circle' : 'square';
-    const x = Math.random() * (GAME_WIDTH - SHAPE_SIZE * 2) + SHAPE_SIZE;
+    const rand = Math.random();
+    let category, item;
 
-    setShapes(prev => [...prev, {
+    if (rand < 0.65) {
+      // 65% gute Items
+      category = 'good';
+      item = ITEMS.good[Math.floor(Math.random() * ITEMS.good.length)];
+    } else if (rand < 0.85) {
+      // 20% schlechte Items
+      category = 'bad';
+      item = ITEMS.bad[Math.floor(Math.random() * ITEMS.bad.length)];
+    } else {
+      // 15% Power-Ups
+      category = 'powerup';
+      item = ITEMS.powerup[Math.floor(Math.random() * ITEMS.powerup.length)];
+    }
+
+    const x = Math.random() * (GAME_WIDTH - ITEM_SIZE);
+
+    setItems(prev => [...prev, {
       id: Date.now() + Math.random(),
-      type,
+      ...item,
+      category,
       x,
-      y: -SHAPE_SIZE,
-      speed: speed + Math.random() * 1.5,
+      y: -ITEM_SIZE,
+      speed: speed + Math.random() * 1,
     }]);
   }, [gameState, speed]);
 
   // Partikel erstellen
-  const createParticles = (x, y, color) => {
+  const createParticles = (x, y, emoji, isGood) => {
     const newParticles = [];
-    for (let i = 0; i < 8; i++) {
-      const angle = (Math.PI * 2 / 8) * i;
+    const color = isGood ? '#FFD700' : '#FF4444';
+
+    for (let i = 0; i < 6; i++) {
+      const angle = (Math.PI * 2 / 6) * i;
       newParticles.push({
         id: Date.now() + i,
         x,
         y,
-        vx: Math.cos(angle) * (3 + Math.random() * 2),
-        vy: Math.sin(angle) * (3 + Math.random() * 2),
-        color,
+        vx: Math.cos(angle) * (2 + Math.random() * 2),
+        vy: Math.sin(angle) * (2 + Math.random() * 2) - 2,
+        emoji: isGood ? '✨' : '💨',
         life: 1,
-        size: 6 + Math.random() * 4,
+        size: 20,
       });
     }
+
+    // Emoji-Partikel
+    newParticles.push({
+      id: Date.now() + 100,
+      x,
+      y,
+      vx: 0,
+      vy: -3,
+      emoji,
+      life: 1.5,
+      size: 30,
+      isMain: true,
+    });
+
     setParticles(prev => [...prev, ...newParticles]);
   };
 
-  // Erfolgseffekt
-  const triggerSuccess = () => {
-    setCatcherEffect('success');
-    setTimeout(() => setCatcherEffect(null), 200);
-  };
-
-  // Fehlereffekt
-  const triggerFail = () => {
-    setCatcherEffect('fail');
-    setTimeout(() => setCatcherEffect(null), 500);
+  // Power-Up aktivieren
+  const activatePowerUp = (effect, duration) => {
+    if (effect === 'shield') {
+      setActiveEffects(prev => ({ ...prev, shield: (prev.shield || 0) + 1 }));
+    } else {
+      setActiveEffects(prev => ({ ...prev, [effect]: true }));
+      setTimeout(() => {
+        setActiveEffects(prev => ({ ...prev, [effect]: false }));
+      }, duration);
+    }
   };
 
   // Game Loop
   useEffect(() => {
     if (gameState !== 'playing') return;
 
-    const catcherY = GAME_HEIGHT - CATCHER_HEIGHT - 20;
-    const catcherX = GAME_WIDTH / 2 - CATCHER_WIDTH / 2;
+    const catcherY = GAME_HEIGHT - CATCHER_HEIGHT - 30;
 
     const gameLoop = (timestamp) => {
       if (!lastTimeRef.current) lastTimeRef.current = timestamp;
-      const delta = (timestamp - lastTimeRef.current) / 16.67; // Normalisieren auf 60fps
+      const delta = (timestamp - lastTimeRef.current) / 16.67;
       lastTimeRef.current = timestamp;
 
-      setShapes(prevShapes => {
-        const newShapes = [];
-        let gameOver = false;
+      setItems(prevItems => {
+        const newItems = [];
+        let scoreChange = 0;
+        let livesChange = 0;
+        let newCombo = combo;
+        let caught = null;
 
-        for (const shape of prevShapes) {
-          const newY = shape.y + shape.speed * delta;
+        for (const item of prevItems) {
+          let newX = item.x;
+          let newY = item.y + item.speed * delta;
 
-          // Kollision mit Catcher prüfen
-          if (
-            newY + SHAPE_SIZE >= catcherY &&
-            newY + SHAPE_SIZE <= catcherY + CATCHER_HEIGHT + shape.speed * 2 &&
-            shape.x >= catcherX - SHAPE_SIZE / 2 &&
-            shape.x <= catcherX + CATCHER_WIDTH + SHAPE_SIZE / 2
-          ) {
-            // Form berührt Catcher
-            if (shape.type === catcherMode) {
-              // Richtig gefangen!
-              setScore(s => s + 1 + Math.floor(combo / 5));
-              setCombo(c => c + 1);
-              createParticles(shape.x, catcherY, shape.type === 'circle' ? COLORS.CIRCLE : COLORS.SQUARE);
-              triggerSuccess();
-
-              // Schwierigkeit erhöhen
-              if ((score + 1) % 10 === 0) {
-                setSpeed(s => Math.min(s + 0.3, 6));
-              }
-            } else {
-              // Falsch! Game Over
-              gameOver = true;
-              triggerFail();
-            }
-            continue; // Form entfernen
+          // Magnet-Effekt: Gute Items werden angezogen
+          if (activeEffects.magnet && item.category === 'good') {
+            const catcherCenter = catcherX + CATCHER_WIDTH / 2;
+            const itemCenter = item.x + ITEM_SIZE / 2;
+            const diff = catcherCenter - itemCenter;
+            newX += diff * 0.05;
           }
 
-          // Form unter dem Bildschirm?
-          if (newY > GAME_HEIGHT + SHAPE_SIZE) {
-            // Verpasst - Combo zurücksetzen aber kein Game Over
-            setCombo(0);
+          // Kollision mit Catcher
+          if (
+            newY + ITEM_SIZE >= catcherY &&
+            newY <= catcherY + CATCHER_HEIGHT &&
+            newX + ITEM_SIZE >= catcherX &&
+            newX <= catcherX + CATCHER_WIDTH
+          ) {
+            if (item.category === 'good') {
+              const points = activeEffects.double ? item.points * 2 : item.points;
+              const comboBonus = Math.floor(newCombo / 3) * 5;
+              scoreChange += points + comboBonus;
+              newCombo++;
+              caught = { emoji: item.emoji, points: points + comboBonus, isGood: true };
+              createParticles(item.x + ITEM_SIZE/2, catcherY, item.emoji, true);
+            } else if (item.category === 'bad') {
+              if (activeEffects.shield > 0) {
+                setActiveEffects(prev => ({ ...prev, shield: prev.shield - 1 }));
+                caught = { emoji: '🛡️', points: 0, isGood: true, blocked: true };
+              } else {
+                livesChange--;
+                newCombo = 0;
+                caught = { emoji: item.emoji, points: item.points, isGood: false };
+                createParticles(item.x + ITEM_SIZE/2, catcherY, item.emoji, false);
+              }
+            } else if (item.category === 'powerup') {
+              activatePowerUp(item.effect, item.duration);
+              caught = { emoji: item.emoji, points: 0, isGood: true, powerup: item.name };
+              createParticles(item.x + ITEM_SIZE/2, catcherY, item.emoji, true);
+            }
             continue;
           }
 
-          newShapes.push({ ...shape, y: newY });
+          // Item aus dem Bildschirm gefallen
+          if (newY > GAME_HEIGHT + ITEM_SIZE) {
+            if (item.category === 'good') {
+              newCombo = 0; // Combo reset wenn gutes Item verpasst
+            }
+            continue;
+          }
+
+          newItems.push({ ...item, x: newX, y: newY });
         }
 
-        if (gameOver) {
-          setGameState('gameover');
-          setHighScore(h => Math.max(h, score));
-          return prevShapes;
+        if (scoreChange !== 0) {
+          setScore(s => Math.max(0, s + scoreChange));
+        }
+        if (livesChange !== 0) {
+          setLives(l => {
+            const newLives = l + livesChange;
+            if (newLives <= 0) {
+              setGameState('gameover');
+            }
+            return Math.max(0, newLives);
+          });
+        }
+        if (caught) {
+          setLastCatch(caught);
+          setTimeout(() => setLastCatch(null), 800);
+        }
+        setCombo(newCombo);
+
+        // Schwierigkeit erhöhen
+        if (score > 0 && score % 100 === 0) {
+          setSpeed(s => Math.min(s + 0.2, 5));
         }
 
-        return newShapes;
+        return newItems;
       });
 
       // Partikel updaten
@@ -182,7 +312,7 @@ const ShapeFall = ({ onClose, onWin }) => {
             ...p,
             x: p.x + p.vx,
             y: p.y + p.vy,
-            vy: p.vy + 0.1, // Gravity
+            vy: p.isMain ? p.vy : p.vy + 0.15,
             life: p.life - 0.03,
           }))
           .filter(p => p.life > 0)
@@ -198,205 +328,224 @@ const ShapeFall = ({ onClose, onWin }) => {
         cancelAnimationFrame(gameLoopRef.current);
       }
     };
-  }, [gameState, catcherMode, score, combo]);
+  }, [gameState, catcherX, combo, activeEffects, score]);
 
   // Spawn Timer
   useEffect(() => {
     if (gameState !== 'playing') return;
 
-    const spawnInterval = Math.max(800 - score * 20, 400);
+    const spawnInterval = Math.max(1200 - Math.floor(score / 50) * 100, 600);
 
-    spawnTimerRef.current = setInterval(() => {
-      spawnShape();
-    }, spawnInterval);
-
-    // Initial spawn
-    setTimeout(spawnShape, 500);
+    spawnTimerRef.current = setInterval(spawnItem, spawnInterval);
+    setTimeout(spawnItem, 300);
 
     return () => {
       if (spawnTimerRef.current) {
         clearInterval(spawnTimerRef.current);
       }
     };
-  }, [gameState, spawnShape, score]);
+  }, [gameState, spawnItem, score]);
+
+  // Highscore speichern
+  useEffect(() => {
+    if (gameState === 'gameover' && score > highScore) {
+      setHighScore(score);
+      localStorage.setItem('leckerliFangen_highscore', score.toString());
+    }
+  }, [gameState, score, highScore]);
 
   // Münzen berechnen
-  const getCoins = () => Math.floor(score / 3);
-
-  // Click Handler
-  const handleClick = () => {
-    if (gameState === 'ready' || gameState === 'gameover') {
-      startGame();
-    } else {
-      toggleCatcher();
-    }
-  };
+  const getCoins = () => Math.floor(score / 20);
 
   return (
     <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4">
-      {/* CSS Animationen */}
       <style>{`
-        @keyframes neon-pulse {
-          0%, 100% { filter: brightness(1); }
-          50% { filter: brightness(1.5); }
+        @keyframes bounce-in {
+          0% { transform: scale(0) translateY(0); opacity: 0; }
+          50% { transform: scale(1.3) translateY(-10px); }
+          100% { transform: scale(1) translateY(-20px); opacity: 1; }
+        }
+        @keyframes float-up {
+          0% { transform: translateY(0); opacity: 1; }
+          100% { transform: translateY(-40px); opacity: 0; }
         }
         @keyframes shake {
           0%, 100% { transform: translateX(0); }
-          20% { transform: translateX(-10px); }
-          40% { transform: translateX(10px); }
-          60% { transform: translateX(-10px); }
-          80% { transform: translateX(10px); }
+          20% { transform: translateX(-8px); }
+          40% { transform: translateX(8px); }
+          60% { transform: translateX(-8px); }
+          80% { transform: translateX(8px); }
         }
-        @keyframes success-glow {
-          0% { transform: scale(1); filter: brightness(1); }
-          50% { transform: scale(1.2); filter: brightness(2); }
-          100% { transform: scale(1); filter: brightness(1); }
+        @keyframes pulse-glow {
+          0%, 100% { box-shadow: 0 0 20px rgba(255, 215, 0, 0.5); }
+          50% { box-shadow: 0 0 40px rgba(255, 215, 0, 0.8); }
         }
-        @keyframes float-down {
-          0% { transform: translateY(-20px); opacity: 0; }
-          100% { transform: translateY(0); opacity: 1; }
+        .catch-popup {
+          animation: bounce-in 0.3s ease-out forwards, float-up 0.5s ease-in 0.3s forwards;
         }
-        .neon-text {
-          text-shadow: 0 0 10px currentColor, 0 0 20px currentColor, 0 0 30px currentColor;
+        .shake {
+          animation: shake 0.4s ease-in-out;
         }
-        .shape-fall {
-          animation: float-down 0.3s ease-out;
+        .magnet-active {
+          animation: pulse-glow 0.5s ease-in-out infinite;
         }
       `}</style>
 
       <div
-        className="relative rounded-2xl overflow-hidden"
+        ref={gameAreaRef}
+        className="relative rounded-2xl overflow-hidden select-none"
         style={{
           width: GAME_WIDTH,
-          height: GAME_HEIGHT + 100,
-          backgroundColor: COLORS.BG,
-          boxShadow: '0 0 50px rgba(0, 255, 255, 0.3), 0 0 100px rgba(255, 0, 255, 0.2)',
+          height: GAME_HEIGHT,
+          background: 'linear-gradient(to bottom, #1a1a2e, #16213e, #0f3460)',
+          boxShadow: '0 0 50px rgba(100, 150, 255, 0.3)',
+          touchAction: 'none',
         }}
-        onClick={handleClick}
+        onMouseDown={handleMouseDown}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
       >
         {/* Header */}
         <div className="absolute top-0 left-0 right-0 p-3 flex justify-between items-center z-10"
-             style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.8), transparent)' }}>
-          <div className="text-cyan-400 font-bold neon-text">
-            Score: {score}
+             style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.7), transparent)' }}>
+          <div className="text-yellow-400 font-bold text-lg">
+            {score} Pkt
           </div>
-          <div className="text-center">
-            <div className="text-white text-sm font-bold">SHAPE FALL</div>
-            {combo > 2 && (
-              <div className="text-yellow-400 text-xs animate-pulse">
-                {combo}x Combo!
-              </div>
-            )}
+          <div className="flex gap-1">
+            {[...Array(3)].map((_, i) => (
+              <span key={i} className={`text-xl ${i < lives ? '' : 'opacity-30'}`}>
+                {i < lives ? '❤️' : '🖤'}
+              </span>
+            ))}
           </div>
-          <div className="text-fuchsia-400 font-bold neon-text">
-            Best: {highScore}
+          <div className="text-purple-400 font-bold">
+            🏆 {highScore}
           </div>
         </div>
 
-        {/* Spielfeld */}
+        {/* Combo Anzeige */}
+        {combo >= 3 && (
+          <div className="absolute top-14 left-1/2 -translate-x-1/2 text-orange-400 font-bold text-lg animate-pulse">
+            {combo}x Combo! 🔥
+          </div>
+        )}
+
+        {/* Aktive Power-Ups */}
+        <div className="absolute top-14 right-3 flex flex-col gap-1">
+          {activeEffects.magnet && (
+            <span className="text-2xl animate-bounce">🧲</span>
+          )}
+          {activeEffects.double && (
+            <span className="text-2xl animate-bounce">✨</span>
+          )}
+          {activeEffects.shield > 0 && (
+            <span className="text-2xl animate-bounce">🛡️ x{activeEffects.shield}</span>
+          )}
+        </div>
+
+        {/* Fallende Items */}
+        {items.map(item => (
+          <div
+            key={item.id}
+            className="absolute transition-transform"
+            style={{
+              left: item.x,
+              top: item.y,
+              width: ITEM_SIZE,
+              height: ITEM_SIZE,
+              fontSize: ITEM_SIZE - 8,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              filter: item.category === 'powerup' ? 'drop-shadow(0 0 10px gold)' : 'none',
+            }}
+          >
+            {item.emoji}
+          </div>
+        ))}
+
+        {/* Partikel */}
+        {particles.map(p => (
+          <div
+            key={p.id}
+            className="absolute pointer-events-none"
+            style={{
+              left: p.x,
+              top: p.y,
+              fontSize: p.size,
+              opacity: p.life,
+              transform: `scale(${p.life})`,
+            }}
+          >
+            {p.emoji}
+          </div>
+        ))}
+
+        {/* Catch Feedback */}
+        {lastCatch && (
+          <div
+            className="absolute left-1/2 -translate-x-1/2 catch-popup pointer-events-none z-20"
+            style={{ top: GAME_HEIGHT - 150 }}
+          >
+            <div className={`text-2xl font-bold ${lastCatch.isGood ? 'text-green-400' : 'text-red-400'}`}>
+              {lastCatch.blocked ? '🛡️ Geblockt!' :
+               lastCatch.powerup ? `${lastCatch.emoji} ${lastCatch.powerup}!` :
+               `${lastCatch.points > 0 ? '+' : ''}${lastCatch.points}`}
+            </div>
+          </div>
+        )}
+
+        {/* Catcher (Korb) */}
         <div
-          className="absolute"
+          className={`absolute transition-colors ${activeEffects.magnet ? 'magnet-active' : ''} ${lives < 3 && lastCatch && !lastCatch.isGood ? 'shake' : ''}`}
           style={{
-            top: 50,
-            left: 0,
-            width: GAME_WIDTH,
-            height: GAME_HEIGHT,
-            animation: catcherEffect === 'fail' ? 'shake 0.5s ease-in-out' : 'none',
+            left: catcherX,
+            top: GAME_HEIGHT - CATCHER_HEIGHT - 30,
+            width: CATCHER_WIDTH,
+            height: CATCHER_HEIGHT,
+            fontSize: CATCHER_HEIGHT - 5,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            filter: activeEffects.shield > 0 ? 'drop-shadow(0 0 15px cyan)' : 'drop-shadow(0 0 5px rgba(255,255,255,0.3))',
           }}
         >
-          {/* Fallende Formen */}
-          {shapes.map(shape => (
-            <div
-              key={shape.id}
-              className="absolute shape-fall"
-              style={{
-                left: shape.x - SHAPE_SIZE / 2,
-                top: shape.y,
-                width: SHAPE_SIZE,
-                height: SHAPE_SIZE,
-                backgroundColor: shape.type === 'circle' ? COLORS.CIRCLE : COLORS.SQUARE,
-                borderRadius: shape.type === 'circle' ? '50%' : '4px',
-                boxShadow: shape.type === 'circle' ? COLORS.GLOW_CIRCLE : COLORS.GLOW_SQUARE,
-              }}
-            />
-          ))}
-
-          {/* Partikel */}
-          {particles.map(p => (
-            <div
-              key={p.id}
-              className="absolute rounded"
-              style={{
-                left: p.x,
-                top: p.y,
-                width: p.size,
-                height: p.size,
-                backgroundColor: p.color,
-                opacity: p.life,
-                boxShadow: `0 0 ${p.size}px ${p.color}`,
-              }}
-            />
-          ))}
-
-          {/* Catcher */}
-          <div
-            className="absolute transition-all duration-100"
-            style={{
-              left: GAME_WIDTH / 2 - CATCHER_WIDTH / 2,
-              top: GAME_HEIGHT - CATCHER_HEIGHT - 20,
-              width: CATCHER_WIDTH,
-              height: CATCHER_HEIGHT,
-              backgroundColor: catcherMode === 'circle' ? COLORS.CIRCLE : COLORS.SQUARE,
-              borderRadius: catcherMode === 'circle' ? '20px' : '4px',
-              boxShadow: catcherMode === 'circle' ? COLORS.GLOW_CIRCLE : COLORS.GLOW_SQUARE,
-              animation: catcherEffect === 'success' ? 'success-glow 0.2s ease-out' : 'none',
-              transform: catcherEffect === 'success' ? 'scale(1.1)' : 'scale(1)',
-            }}
-          />
-
-          {/* Modus-Anzeige */}
-          <div
-            className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2 text-sm font-bold"
-            style={{ top: GAME_HEIGHT - 60 }}
-          >
-            <span style={{ color: COLORS.CIRCLE, opacity: catcherMode === 'circle' ? 1 : 0.3 }}>●</span>
-            <span className="text-white/50">⟷</span>
-            <span style={{ color: COLORS.SQUARE, opacity: catcherMode === 'square' ? 1 : 0.3 }}>■</span>
-          </div>
+          🧺
         </div>
+
+        {/* Boden-Linie */}
+        <div
+          className="absolute left-0 right-0 h-1 bg-gradient-to-r from-transparent via-white/20 to-transparent"
+          style={{ top: GAME_HEIGHT - 20 }}
+        />
 
         {/* Start Screen */}
         {gameState === 'ready' && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 z-20">
-            <div className="text-4xl font-bold text-white mb-4 neon-text" style={{ color: COLORS.CIRCLE }}>
-              SHAPE FALL
+            <div className="text-4xl mb-2">🐕</div>
+            <div className="text-3xl font-bold text-yellow-400 mb-4">
+              Leckerli Fangen!
             </div>
-            <div className="flex gap-4 mb-6">
-              <div
-                className="w-12 h-12 rounded-full"
-                style={{ backgroundColor: COLORS.CIRCLE, boxShadow: COLORS.GLOW_CIRCLE }}
-              />
-              <div
-                className="w-12 h-12 rounded"
-                style={{ backgroundColor: COLORS.SQUARE, boxShadow: COLORS.GLOW_SQUARE }}
-              />
+            <div className="flex gap-3 mb-4 text-3xl">
+              <span>🦴</span>
+              <span>🍖</span>
+              <span>⭐</span>
+              <span>❤️</span>
             </div>
-            <p className="text-white/80 text-center px-4 mb-4">
-              Tippe oder drücke SPACE um zwischen<br />
-              <span style={{ color: COLORS.CIRCLE }}>Kreis</span> und <span style={{ color: COLORS.SQUARE }}>Quadrat</span> zu wechseln!
+            <p className="text-white/80 text-center px-6 mb-2">
+              Fange die Leckerlis mit dem Korb!
             </p>
-            <p className="text-white/60 text-sm mb-6">
-              Fange die passenden Formen!
+            <p className="text-white/60 text-sm text-center px-6 mb-4">
+              Aber Vorsicht vor 🧦 und 👟!
             </p>
+            <div className="text-white/50 text-xs mb-6 text-center">
+              Bewege den Korb mit Finger/Maus<br/>oder ← → Pfeiltasten
+            </div>
             <button
               onClick={startGame}
-              className="px-8 py-3 rounded-full font-bold text-lg transition-transform hover:scale-110"
-              style={{
-                background: `linear-gradient(135deg, ${COLORS.CIRCLE}, ${COLORS.SQUARE})`,
-                boxShadow: '0 0 30px rgba(0, 255, 255, 0.5)',
-              }}
+              className="px-8 py-3 bg-gradient-to-r from-yellow-500 to-orange-500 rounded-full font-bold text-xl text-white shadow-lg hover:scale-110 transition-transform"
             >
-              START
+              🎮 START
             </button>
           </div>
         )}
@@ -404,17 +553,17 @@ const ShapeFall = ({ onClose, onWin }) => {
         {/* Game Over Screen */}
         {gameState === 'gameover' && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-20">
-            <div
-              className="text-3xl font-bold mb-2 neon-text"
-              style={{ color: COLORS.SQUARE }}
-            >
-              GAME OVER
+            <div className="text-4xl mb-2">
+              {score >= highScore && score > 0 ? '🎉' : '😢'}
             </div>
-            <div className="text-6xl font-bold text-white mb-2">
+            <div className="text-2xl font-bold text-red-400 mb-2">
+              Game Over!
+            </div>
+            <div className="text-5xl font-bold text-white mb-1">
               {score}
             </div>
             <div className="text-white/60 mb-4">
-              {score > highScore ? '🎉 Neuer Highscore!' : `Highscore: ${highScore}`}
+              {score >= highScore && score > 0 ? '🏆 Neuer Highscore!' : `Highscore: ${highScore}`}
             </div>
             <div className="text-yellow-400 text-xl font-bold mb-6">
               +{getCoins()} 💰
@@ -422,18 +571,15 @@ const ShapeFall = ({ onClose, onWin }) => {
             <div className="flex gap-3">
               <button
                 onClick={startGame}
-                className="px-6 py-2 rounded-full font-bold transition-transform hover:scale-110"
-                style={{
-                  background: `linear-gradient(135deg, ${COLORS.CIRCLE}, ${COLORS.SQUARE})`,
-                }}
+                className="px-6 py-2 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full font-bold text-white hover:scale-110 transition-transform"
               >
-                Nochmal
+                🔄 Nochmal
               </button>
               <button
                 onClick={() => onWin(getCoins())}
-                className="px-6 py-2 bg-white/20 rounded-full font-bold text-white transition-transform hover:scale-110"
+                className="px-6 py-2 bg-white/20 rounded-full font-bold text-white hover:scale-110 transition-transform"
               >
-                Beenden (+{getCoins()}💰)
+                ✓ Beenden
               </button>
             </div>
           </div>
@@ -441,8 +587,8 @@ const ShapeFall = ({ onClose, onWin }) => {
 
         {/* Anleitung unten */}
         {gameState === 'playing' && (
-          <div className="absolute bottom-2 left-0 right-0 text-center text-white/40 text-xs">
-            Tippe zum Wechseln | Score ÷ 3 = Münzen
+          <div className="absolute bottom-1 left-0 right-0 text-center text-white/30 text-xs">
+            ← Bewege den Korb → | 20 Punkte = 1 Münze
           </div>
         )}
       </div>
