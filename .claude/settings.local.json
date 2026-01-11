@@ -8,7 +8,10 @@
       "Bash(git add:*)",
       "Bash(git commit -m \"$\\(cat <<''EOF''\nInitial commit: Yuna Pet Game mit MathHero\n\n- Hauptspiel mit Yuna Pet\n- MathHero Mathe-Lernspiel für Kinder\n- ElevenLabs TTS Integration für Vorlesemodus\n- Responsive Design mit Tailwind CSS\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
       "Bash(gh repo create:*)",
-      "Bash(git commit -m \"$\\(cat <<''EOF''\nLeckerli Fangen Spiel + Mobile Frame\n\n- ShapeFall komplett umgebaut zu \"Leckerli Fangen\"\n- Einfache Touch/Maus-Steuerung für den Korb\n- Gute Items \\(Knochen, Leckerlis, Herzen\\) fangen\n- Schlechte Items \\(Socken, Schuhe\\) meiden\n- Power-Ups: Magnet, Doppelte Punkte, Schild\n- 9:16 Handy-Frame für Desktop-Ansicht\n- Aktualisierte Hunde-Bilder\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nLeckerli Fangen Spiel + Mobile Frame\n\n- ShapeFall komplett umgebaut zu \"Leckerli Fangen\"\n- Einfache Touch/Maus-Steuerung für den Korb\n- Gute Items \\(Knochen, Leckerlis, Herzen\\) fangen\n- Schlechte Items \\(Socken, Schuhe\\) meiden\n- Power-Ups: Magnet, Doppelte Punkte, Schild\n- 9:16 Handy-Frame für Desktop-Ansicht\n- Aktualisierte Hunde-Bilder\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git push:*)",
+      "Bash(git pull:*)",
+      "Bash(git stash:*)"
     ]
   }
 }

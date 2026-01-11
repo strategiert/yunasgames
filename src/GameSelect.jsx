@@ -89,6 +89,14 @@ const GameSelect = ({ onSelectGame, onClose }) => {
       color: 'from-indigo-400 to-purple-600',
       hasDifficulty: false,
     },
+    {
+      id: 'game2048',
+      name: '2048',
+      emoji: '🔢',
+      description: 'Kombiniere Zahlen bis zur 2048!',
+      color: 'from-yellow-400 to-orange-500',
+      hasDifficulty: false,
+    },
   ];
 
   const difficulties = [
@@ -248,11 +256,10 @@ const GameSelect = ({ onSelectGame, onClose }) => {
                 <button
                   key={index}
                   onClick={() => goToIndex(index)}
-                  className={`w-2.5 h-2.5 rounded-full transition-all ${
-                    index === currentIndex
+                  className={`w-2.5 h-2.5 rounded-full transition-all ${index === currentIndex
                       ? 'bg-white scale-125'
                       : 'bg-white/40 hover:bg-white/60'
-                  }`}
+                    }`}
                 />
               ))}
             </div>

@@ -9,6 +9,7 @@ import VisualMemory from './VisualMemory';
 import NumberMemory from './NumberMemory';
 import RhythmPaws from './RhythmPaws';
 import MathHero from './MathHero';
+import Game2048 from './Game2048';
 import GameSelect from './GameSelect';
 
 // Import dog images
@@ -249,9 +250,8 @@ const PetGame = () => {
           <img
             src={getPetImage()}
             alt={petName}
-            className={`object-contain transition-transform duration-300 ${
-              mobileDisplay ? 'w-28 h-28' : 'w-48 h-48'
-            }`}
+            className={`object-contain transition-transform duration-300 ${mobileDisplay ? 'w-28 h-28' : 'w-48 h-48'
+              }`}
             style={{
               transform: mood === 'playing' ? 'scale(1.1) rotate(5deg)' : 'scale(1)',
               filter: isSleeping ? 'brightness(0.7)' : 'none'
@@ -265,9 +265,8 @@ const PetGame = () => {
           )}
         </div>
         {/* Name */}
-        <div className={`font-bold bg-white/80 px-3 py-1 rounded-full ${
-          mobileDisplay ? 'text-sm mt-1' : 'text-lg mt-2'
-        }`}>
+        <div className={`font-bold bg-white/80 px-3 py-1 rounded-full ${mobileDisplay ? 'text-sm mt-1' : 'text-lg mt-2'
+          }`}>
           {petName}
         </div>
       </div>
@@ -312,11 +311,10 @@ const PetGame = () => {
             <button
               key={pet.type}
               onClick={() => setPetType(pet.type)}
-              className={`p-4 rounded-2xl transition-all ${
-                petType === pet.type
-                  ? 'bg-white shadow-lg scale-110 ring-4 ring-pink-400'
-                  : 'bg-white/50 hover:bg-white/80'
-              }`}
+              className={`p-4 rounded-2xl transition-all ${petType === pet.type
+                ? 'bg-white shadow-lg scale-110 ring-4 ring-pink-400'
+                : 'bg-white/50 hover:bg-white/80'
+                }`}
             >
               <img
                 src={pet.image}
@@ -377,9 +375,8 @@ const PetGame = () => {
               <button
                 key={color}
                 onClick={() => setCollarColor(color)}
-                className={`w-10 h-10 rounded-full transition-transform ${
-                  collarColor === color ? 'scale-125 ring-4 ring-gray-400' : ''
-                }`}
+                className={`w-10 h-10 rounded-full transition-transform ${collarColor === color ? 'scale-125 ring-4 ring-gray-400' : ''
+                  }`}
                 style={{ backgroundColor: color }}
               />
             ))}
@@ -389,9 +386,8 @@ const PetGame = () => {
             <span>Glöckchen:</span>
             <button
               onClick={() => setHasBell(!hasBell)}
-              className={`px-4 py-2 rounded-full font-bold ${
-                hasBell ? 'bg-yellow-400' : 'bg-gray-200'
-              }`}
+              className={`px-4 py-2 rounded-full font-bold ${hasBell ? 'bg-yellow-400' : 'bg-gray-200'
+                }`}
             >
               {hasBell ? '🔔 An' : '🔕 Aus'}
             </button>
@@ -428,11 +424,10 @@ const PetGame = () => {
                 <button
                   onClick={() => buyFurniture(item.id, item.price)}
                   disabled={coins < item.price}
-                  className={`px-4 py-2 rounded-full font-bold ${
-                    coins >= item.price
-                      ? 'bg-green-500 text-white'
-                      : 'bg-gray-300 text-gray-500'
-                  }`}
+                  className={`px-4 py-2 rounded-full font-bold ${coins >= item.price
+                    ? 'bg-green-500 text-white'
+                    : 'bg-gray-300 text-gray-500'
+                    }`}
                 >
                   Kaufen
                 </button>
@@ -566,6 +561,14 @@ const PetGame = () => {
         />
       )}
 
+      {/* 2048 Game */}
+      {currentGame === 'game2048' && (
+        <Game2048
+          onClose={(earnedCoins) => handleGameEnd(earnedCoins || 0)}
+          onWin={handleGameEnd}
+        />
+      )}
+
       {/* Header */}
       <div className={`flex justify-between items-center ${mobileDisplay ? 'mb-2' : 'mb-4'}`}>
         <div className={`bg-yellow-400 rounded-full font-bold shadow ${mobileDisplay ? 'px-3 py-1 text-sm' : 'px-4 py-2'}`}>
@@ -577,9 +580,8 @@ const PetGame = () => {
           <button onClick={() => setScreen('house')} className={`bg-white/50 rounded-full ${mobileDisplay ? 'text-lg p-1.5' : 'text-2xl p-2'}`}>🏠</button>
           <button
             onClick={toggleMobileDisplay}
-            className={`rounded-full transition-colors ${
-              mobileDisplay ? 'bg-green-400 text-base p-1.5' : 'bg-white/50 text-xl p-2'
-            }`}
+            className={`rounded-full transition-colors ${mobileDisplay ? 'bg-green-400 text-base p-1.5' : 'bg-white/50 text-xl p-2'
+              }`}
             title={mobileDisplay ? 'Mobile Ansicht an' : 'Mobile Ansicht aus'}
           >
             📱
@@ -597,15 +599,13 @@ const PetGame = () => {
 
       {/* Pet display area with background image */}
       <div
-        className={`rounded-2xl shadow-lg relative overflow-hidden transition-all duration-500 ${
-          mobileDisplay ? 'p-3 mb-2' : 'p-6 mb-4'
-        }`}
+        className={`rounded-2xl shadow-lg relative overflow-hidden transition-all duration-500 ${mobileDisplay ? 'p-3 mb-2' : 'p-6 mb-4'
+          }`}
         style={{
-          backgroundImage: `url(${
-            currentRoom === 'bathroom' ? bathroomBg :
+          backgroundImage: `url(${currentRoom === 'bathroom' ? bathroomBg :
             currentRoom === 'playroom' ? playroomBg :
-            mainroomBg
-          })`,
+              mainroomBg
+            })`,
           backgroundSize: 'cover',
           backgroundPosition: 'center',
           minHeight: mobileDisplay ? '160px' : '250px'
@@ -637,9 +637,8 @@ const PetGame = () => {
         <button
           onClick={feed}
           disabled={coins < 1 || isSleeping}
-          className={`bg-green-500 hover:bg-green-600 disabled:bg-gray-400 text-white rounded-2xl shadow-lg flex flex-col items-center ${
-            mobileDisplay ? 'p-2' : 'p-4'
-          }`}
+          className={`bg-green-500 hover:bg-green-600 disabled:bg-gray-400 text-white rounded-2xl shadow-lg flex flex-col items-center ${mobileDisplay ? 'p-2' : 'p-4'
+            }`}
         >
           <span className={mobileDisplay ? 'text-lg' : 'text-2xl'}>🍖</span>
           <span className={`${mobileDisplay ? 'text-[10px]' : 'text-xs'} mt-1`}>Füttern</span>
@@ -649,9 +648,8 @@ const PetGame = () => {
         <button
           onClick={giveDrink}
           disabled={coins < 2 || isSleeping}
-          className={`bg-blue-500 hover:bg-blue-600 disabled:bg-gray-400 text-white rounded-2xl shadow-lg flex flex-col items-center ${
-            mobileDisplay ? 'p-2' : 'p-4'
-          }`}
+          className={`bg-blue-500 hover:bg-blue-600 disabled:bg-gray-400 text-white rounded-2xl shadow-lg flex flex-col items-center ${mobileDisplay ? 'p-2' : 'p-4'
+            }`}
         >
           <span className={mobileDisplay ? 'text-lg' : 'text-2xl'}>☕</span>
           <span className={`${mobileDisplay ? 'text-[10px]' : 'text-xs'} mt-1`}>Kakao</span>
@@ -661,9 +659,8 @@ const PetGame = () => {
         <button
           onClick={goSleep}
           disabled={isSleeping}
-          className={`bg-indigo-500 hover:bg-indigo-600 disabled:bg-gray-400 text-white rounded-2xl shadow-lg flex flex-col items-center ${
-            mobileDisplay ? 'p-2' : 'p-4'
-          }`}
+          className={`bg-indigo-500 hover:bg-indigo-600 disabled:bg-gray-400 text-white rounded-2xl shadow-lg flex flex-col items-center ${mobileDisplay ? 'p-2' : 'p-4'
+            }`}
         >
           <span className={mobileDisplay ? 'text-lg' : 'text-2xl'}>🛏️</span>
           <span className={`${mobileDisplay ? 'text-[10px]' : 'text-xs'} mt-1`}>Schlafen</span>
@@ -672,9 +669,8 @@ const PetGame = () => {
         <button
           onClick={useToilet}
           disabled={isSleeping || needsClean}
-          className={`bg-purple-500 hover:bg-purple-600 disabled:bg-gray-400 text-white rounded-2xl shadow-lg flex flex-col items-center ${
-            mobileDisplay ? 'p-2' : 'p-4'
-          }`}
+          className={`bg-purple-500 hover:bg-purple-600 disabled:bg-gray-400 text-white rounded-2xl shadow-lg flex flex-col items-center ${mobileDisplay ? 'p-2' : 'p-4'
+            }`}
         >
           <span className={mobileDisplay ? 'text-lg' : 'text-2xl'}>🚽</span>
           <span className={`${mobileDisplay ? 'text-[10px]' : 'text-xs'} mt-1`}>Toilette</span>
@@ -683,9 +679,8 @@ const PetGame = () => {
         <button
           onClick={play}
           disabled={isSleeping || currentGame !== null}
-          className={`bg-orange-500 hover:bg-orange-600 disabled:bg-gray-400 text-white rounded-2xl shadow-lg flex flex-col items-center col-span-2 ${
-            mobileDisplay ? 'p-2' : 'p-4'
-          }`}
+          className={`bg-orange-500 hover:bg-orange-600 disabled:bg-gray-400 text-white rounded-2xl shadow-lg flex flex-col items-center col-span-2 ${mobileDisplay ? 'p-2' : 'p-4'
+            }`}
         >
           <span className={mobileDisplay ? 'text-lg' : 'text-2xl'}>🎮</span>
           <span className={`${mobileDisplay ? 'text-[10px]' : 'text-xs'} mt-1`}>Spielen</span>
