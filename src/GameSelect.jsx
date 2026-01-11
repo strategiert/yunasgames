@@ -97,6 +97,14 @@ const GameSelect = ({ onSelectGame, onClose }) => {
       color: 'from-yellow-400 to-orange-500',
       hasDifficulty: false,
     },
+    {
+      id: 'jigsaw',
+      name: 'Jigsaw Fantasy',
+      emoji: '🧩',
+      description: 'Erstelle Puzzles aus Fotos oder KI-Bildern!',
+      color: 'from-pink-400 to-rose-600',
+      hasDifficulty: false,
+    },
   ];
 
   const difficulties = [
@@ -257,8 +265,8 @@ const GameSelect = ({ onSelectGame, onClose }) => {
                   key={index}
                   onClick={() => goToIndex(index)}
                   className={`w-2.5 h-2.5 rounded-full transition-all ${index === currentIndex
-                      ? 'bg-white scale-125'
-                      : 'bg-white/40 hover:bg-white/60'
+                    ? 'bg-white scale-125'
+                    : 'bg-white/40 hover:bg-white/60'
                     }`}
                 />
               ))}

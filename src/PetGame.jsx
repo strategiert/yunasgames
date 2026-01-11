@@ -10,6 +10,7 @@ import NumberMemory from './NumberMemory';
 import RhythmPaws from './RhythmPaws';
 import MathHero from './MathHero';
 import Game2048 from './Game2048';
+import JigsawGame from './JigsawGame';
 import GameSelect from './GameSelect';
 
 // Import dog images
@@ -564,6 +565,14 @@ const PetGame = () => {
       {/* 2048 Game */}
       {currentGame === 'game2048' && (
         <Game2048
+          onClose={(earnedCoins) => handleGameEnd(earnedCoins || 0)}
+          onWin={handleGameEnd}
+        />
+      )}
+
+      {/* Jigsaw Game */}
+      {currentGame === 'jigsaw' && (
+        <JigsawGame
           onClose={(earnedCoins) => handleGameEnd(earnedCoins || 0)}
           onWin={handleGameEnd}
         />
