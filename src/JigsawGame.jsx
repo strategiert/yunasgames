@@ -212,12 +212,17 @@ const JigsawGame = ({ onClose, onWin }) => {
             if (!apiKey) throw new Error("API Key not found in .env");
 
             // Imagen 3 endpoint
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict?key=${apiKey}`, {
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:generateImage?key=${apiKey}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    prompt: { text: prompt },
-                    aspectRatio: "9:16"
+                    instances: [{
+                        prompt: prompt
+                    }],
+                    parameters: {
+                        sampleCount: 1,
+                        aspectRatio: "9:16"
+                    }
                 })
             });
 
@@ -227,11 +232,12 @@ const JigsawGame = ({ onClose, onWin }) => {
             }
 
             const data = await response.json();
-            // Assuming response structure (may vary, adapting to standard)
-            // Standard Gemini Image response usually wraps the image in base64
-            if (data.images && data.images[0]) {
-                const b64 = data.images[0].image64;
-                const mime = data.images[0].mimeType || 'image/png';
+            // Imagen 3 response structure
+            if (data.predictions && data.predictions[0]) {
+                const prediction = data.predictions[0];
+                // The response contains either bytesBase64Encoded or mimeType
+                const b64 = prediction.bytesBase64Encoded;
+                const mime = prediction.mimeType || 'image/png';
                 const imgUrl = `data:${mime};base64,${b64}`;
                 setImage(imgUrl);
                 initGame(imgUrl);
