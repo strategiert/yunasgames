@@ -208,37 +208,23 @@ const JigsawGame = ({ onClose, onWin }) => {
         setIsGenerating(true);
 
         try {
-            const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-            if (!apiKey) throw new Error("API Key not found in .env");
-
-            // Imagen 3 endpoint
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:generateImage?key=${apiKey}`, {
+            // Use Vercel Serverless Function to avoid CORS issues
+            const response = await fetch('/api/generate-image', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    instances: [{
-                        prompt: prompt
-                    }],
-                    parameters: {
-                        sampleCount: 1,
-                        aspectRatio: "9:16"
-                    }
-                })
+                body: JSON.stringify({ prompt })
             });
 
             if (!response.ok) {
-                const err = await response.text();
-                throw new Error(`API Error: ${err}`);
+                const err = await response.json();
+                throw new Error(err.error || 'Failed to generate image');
             }
 
             const data = await response.json();
-            // Imagen 3 response structure
-            if (data.predictions && data.predictions[0]) {
-                const prediction = data.predictions[0];
-                // The response contains either bytesBase64Encoded or mimeType
-                const b64 = prediction.bytesBase64Encoded;
-                const mime = prediction.mimeType || 'image/png';
-                const imgUrl = `data:${mime};base64,${b64}`;
+
+            // Build data URL from response
+            if (data.image && data.mimeType) {
+                const imgUrl = `data:${data.mimeType};base64,${data.image}`;
                 setImage(imgUrl);
                 initGame(imgUrl);
             } else {
