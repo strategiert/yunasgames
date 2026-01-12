@@ -208,19 +208,73 @@ const JigsawGame = ({ onClose, onWin }) => {
         setIsGenerating(true);
 
         try {
-            // Use Vercel Serverless Function to avoid CORS issues
-            const response = await fetch('/api/generate-image', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ prompt })
-            });
+            let data;
 
-            if (!response.ok) {
-                const err = await response.json();
-                throw new Error(err.error || 'Failed to generate image');
+            // Development vs Production mode
+            if (import.meta.env.DEV) {
+                // Development: Call API directly using a CORS proxy
+                const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+                if (!apiKey) throw new Error("API Key not found. Please add VITE_GEMINI_API_KEY to .env file");
+
+                // Use Gemini 2.5 Flash with generateContent
+                const response = await fetch(
+                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{
+                                parts: [{
+                                    text: `Generate an image in 9:16 aspect ratio: ${prompt}`
+                                }]
+                            }],
+                            generationConfig: {
+                                temperature: 1,
+                                maxOutputTokens: 8192,
+                            }
+                        })
+                    }
+                );
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`API Error: ${errorText}`);
+                }
+
+                const apiData = await response.json();
+
+                // Extract image from Gemini response
+                if (apiData.candidates && apiData.candidates[0]) {
+                    const candidate = apiData.candidates[0];
+                    if (candidate.content && candidate.content.parts) {
+                        const imagePart = candidate.content.parts.find(part => part.inlineData);
+                        if (imagePart && imagePart.inlineData) {
+                            data = {
+                                image: imagePart.inlineData.data,
+                                mimeType: imagePart.inlineData.mimeType
+                            };
+                        }
+                    }
+                }
+
+                if (!data) {
+                    throw new Error("No image in API response");
+                }
+            } else {
+                // Production: Use Vercel Serverless Function
+                const response = await fetch('/api/generate-image', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt })
+                });
+
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.error || 'Failed to generate image');
+                }
+
+                data = await response.json();
             }
-
-            const data = await response.json();
 
             // Build data URL from response
             if (data.image && data.mimeType) {
@@ -232,6 +286,7 @@ const JigsawGame = ({ onClose, onWin }) => {
             }
 
         } catch (err) {
+            console.error("Generation error:", err);
             alert("Failed to generate: " + err.message);
             // Fallback for demo if API fails
             // setImage('https://picsum.photos/300/533'); // Only for testing
