@@ -208,19 +208,79 @@ const JigsawGame = ({ onClose, onWin }) => {
         setIsGenerating(true);
 
         try {
-            // Use Vercel Serverless Function to avoid CORS issues
-            const response = await fetch('/api/generate-image', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ prompt })
-            });
+            let data;
+            const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 
-            if (!response.ok) {
-                const err = await response.json();
-                throw new Error(err.error || 'Failed to generate image');
+            // Check if we have direct API access (API key available) or need to use proxy
+            const useDirectAPI = apiKey && apiKey !== 'your_api_key_here' && !window.location.hostname.includes('vercel.app');
+
+            if (useDirectAPI) {
+                // Direct API call (local development with API key)
+                console.log("Using direct API call");
+
+                // Use Gemini 2.5 Flash with generateContent
+                const response = await fetch(
+                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{
+                                parts: [{
+                                    text: `Generate an image in 9:16 aspect ratio: ${prompt}`
+                                }]
+                            }],
+                            generationConfig: {
+                                temperature: 1,
+                                maxOutputTokens: 8192,
+                            }
+                        })
+                    }
+                );
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error("API Error:", errorText);
+                    throw new Error(`API Error: ${errorText}`);
+                }
+
+                const apiData = await response.json();
+
+                // Extract image from Gemini response
+                if (apiData.candidates && apiData.candidates[0]) {
+                    const candidate = apiData.candidates[0];
+                    if (candidate.content && candidate.content.parts) {
+                        const imagePart = candidate.content.parts.find(part => part.inlineData);
+                        if (imagePart && imagePart.inlineData) {
+                            data = {
+                                image: imagePart.inlineData.data,
+                                mimeType: imagePart.inlineData.mimeType
+                            };
+                        }
+                    }
+                }
+
+                if (!data) {
+                    throw new Error("No image in API response");
+                }
+            } else {
+                // Use Vercel Serverless Function (production or no API key locally)
+                console.log("Using Vercel Serverless Function");
+
+                const response = await fetch('/api/generate-image', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+                    console.error("Proxy Error:", errorData);
+                    throw new Error(errorData.error || 'Failed to generate image via proxy');
+                }
+
+                data = await response.json();
             }
-
-            const data = await response.json();
 
             // Build data URL from response
             if (data.image && data.mimeType) {
@@ -232,10 +292,8 @@ const JigsawGame = ({ onClose, onWin }) => {
             }
 
         } catch (err) {
-            alert("Failed to generate: " + err.message);
-            // Fallback for demo if API fails
-            // setImage('https://picsum.photos/300/533'); // Only for testing
-            // initGame('https://picsum.photos/300/533');
+            console.error("Generation error:", err);
+            alert("Failed to generate: " + err.message + "\n\nPlease check:\n1. API key is set in .env\n2. Dev server is running\n3. Console for details");
         } finally {
             setIsGenerating(false);
         }
