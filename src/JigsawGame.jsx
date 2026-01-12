@@ -209,12 +209,14 @@ const JigsawGame = ({ onClose, onWin }) => {
 
         try {
             let data;
+            const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 
-            // Development vs Production mode
-            if (import.meta.env.DEV) {
-                // Development: Call API directly using a CORS proxy
-                const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-                if (!apiKey) throw new Error("API Key not found. Please add VITE_GEMINI_API_KEY to .env file");
+            // Check if we have direct API access (API key available) or need to use proxy
+            const useDirectAPI = apiKey && apiKey !== 'your_api_key_here' && !window.location.hostname.includes('vercel.app');
+
+            if (useDirectAPI) {
+                // Direct API call (local development with API key)
+                console.log("Using direct API call");
 
                 // Use Gemini 2.5 Flash with generateContent
                 const response = await fetch(
@@ -238,6 +240,7 @@ const JigsawGame = ({ onClose, onWin }) => {
 
                 if (!response.ok) {
                     const errorText = await response.text();
+                    console.error("API Error:", errorText);
                     throw new Error(`API Error: ${errorText}`);
                 }
 
@@ -261,7 +264,9 @@ const JigsawGame = ({ onClose, onWin }) => {
                     throw new Error("No image in API response");
                 }
             } else {
-                // Production: Use Vercel Serverless Function
+                // Use Vercel Serverless Function (production or no API key locally)
+                console.log("Using Vercel Serverless Function");
+
                 const response = await fetch('/api/generate-image', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -269,8 +274,9 @@ const JigsawGame = ({ onClose, onWin }) => {
                 });
 
                 if (!response.ok) {
-                    const err = await response.json();
-                    throw new Error(err.error || 'Failed to generate image');
+                    const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+                    console.error("Proxy Error:", errorData);
+                    throw new Error(errorData.error || 'Failed to generate image via proxy');
                 }
 
                 data = await response.json();
@@ -287,10 +293,7 @@ const JigsawGame = ({ onClose, onWin }) => {
 
         } catch (err) {
             console.error("Generation error:", err);
-            alert("Failed to generate: " + err.message);
-            // Fallback for demo if API fails
-            // setImage('https://picsum.photos/300/533'); // Only for testing
-            // initGame('https://picsum.photos/300/533');
+            alert("Failed to generate: " + err.message + "\n\nPlease check:\n1. API key is set in .env\n2. Dev server is running\n3. Console for details");
         } finally {
             setIsGenerating(false);
         }
