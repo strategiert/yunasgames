@@ -3,6 +3,10 @@ import { saveSession, listSessions, deleteSession } from './lib/galleryDb';
 
 const CANVAS_SIZE = 1024;
 
+// Sichtbare Versions-Marke: erscheint im Log-Panel. Zeigt, ob ein Gerät eine
+// alte (Service-Worker-gecachte) App-Version fährt. Bei jeder Änderung hochziehen.
+const APP_VERSION = '2026-07-13 · logs+puzzle-fal';
+
 const COLORS = [
   '#000000', '#ef4444', '#f97316', '#facc15', '#22c55e',
   '#3b82f6', '#8b5cf6', '#ec4899', '#92400e', '#64748b',
@@ -111,6 +115,8 @@ const MagicPainter = ({ onClose }) => {
   const [sessions, setSessions] = useState(null);
   const [viewingSession, setViewingSession] = useState(null); // {id, drawingUrl, items}
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [logs, setLogs] = useState([]);
+  const [showLogs, setShowLogs] = useState(false);
 
   const canvasRef = useRef(null);
   const drawingRef = useRef(false);
@@ -125,6 +131,13 @@ const MagicPainter = ({ onClose }) => {
     return url;
   }, []);
 
+  // Sichtbares Log am Handy: jeder Schritt landet im Panel (🐞-Button) und in der Konsole.
+  const addLog = useCallback((msg) => {
+    const line = `${new Date().toLocaleTimeString('de-DE')}  ${msg}`;
+    console.log('[Zauber-Maler]', line);
+    setLogs((prev) => [...prev.slice(-49), line]);
+  }, []);
+
   // Alle Object-URLs beim Schließen freigeben
   useEffect(() => {
     const urls = objectUrlsRef.current;
@@ -132,6 +145,21 @@ const MagicPainter = ({ onClose }) => {
       urls.forEach((u) => URL.revokeObjectURL(u));
     };
   }, []);
+
+  // Diagnose beim Öffnen + globale Fehler abfangen (sonst am Handy unsichtbar)
+  useEffect(() => {
+    const onErr = (e) => addLog(`JS-Fehler: ${e.message || e.reason?.message || e.reason || e.type}`);
+    window.addEventListener('error', onErr);
+    window.addEventListener('unhandledrejection', onErr);
+    addLog(
+      `Version ${APP_VERSION} · online=${navigator.onLine} · ` +
+        `ServiceWorker=${navigator.serviceWorker?.controller ? 'aktiv' : 'aus'}`
+    );
+    return () => {
+      window.removeEventListener('error', onErr);
+      window.removeEventListener('unhandledrejection', onErr);
+    };
+  }, [addLog]);
 
   // --- Canvas ---
 
@@ -242,19 +270,30 @@ const MagicPainter = ({ onClose }) => {
     // Hartes Client-Timeout: mobil darf keine Karte endlos "zaubern"
     const abort = new AbortController();
     const timer = setTimeout(() => abort.abort(), 90000);
+    const t0 = Date.now();
     try {
+      addLog(`${styleKey}: sende ${Math.round(dataUri.length / 1024)} KB an /api/paint …`);
       const res = await fetch('/api/paint', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image: dataUri, style: styleKey }),
         signal: abort.signal,
       });
-      if (!res.ok) throw new Error(`Fehler ${res.status}`);
+      const secs = ((Date.now() - t0) / 1000).toFixed(1);
+      addLog(`${styleKey}: Antwort ${res.status} nach ${secs}s`);
+      if (!res.ok) {
+        // Server-Fehlertext mitloggen (z. B. "FAL_API_KEY not configured")
+        const detail = await res.text().catch(() => '');
+        addLog(`${styleKey}: Serverfehler ${res.status}: ${detail.slice(0, 160)}`);
+        throw new Error(`Serverfehler ${res.status}`);
+      }
       const { url } = await res.json();
+      addLog(`${styleKey}: lade Bild …`);
       const imgRes = await fetch(url, { signal: abort.signal });
-      if (!imgRes.ok) throw new Error('Bild-Download fehlgeschlagen');
+      if (!imgRes.ok) throw new Error(`Bild-Download ${imgRes.status}`);
       const blob = await imgRes.blob();
       const objUrl = trackUrl(blob);
+      addLog(`${styleKey}: fertig ✓ (${Math.round(blob.size / 1024)} KB)`);
       setResults((prev) => ({ ...prev, [styleKey]: { status: 'done', url: objUrl } }));
       if (sessionRef.current) {
         sessionRef.current.results[styleKey] = blob;
@@ -262,7 +301,8 @@ const MagicPainter = ({ onClose }) => {
       }
     } catch (err) {
       console.error(`Zauber-Maler ${styleKey}:`, err);
-      const reason = err.name === 'AbortError' ? 'Zeitüberschreitung' : err.message;
+      const reason = err.name === 'AbortError' ? 'Zeitüberschreitung (90s)' : err.message;
+      addLog(`${styleKey}: FEHLER — ${reason}`);
       setResults((prev) => ({ ...prev, [styleKey]: { status: 'error', reason } }));
     } finally {
       clearTimeout(timer);
@@ -297,6 +337,7 @@ const MagicPainter = ({ onClose }) => {
     setDrawingPreview(trackUrl(drawingBlob));
     setResults({});
     setView('result');
+    addLog(`Zeichnung fertig (${Math.round(dataUri.length / 1024)} KB), starte 3 Stile …`);
     STYLES.forEach((s) => runStyle(s.key, dataUri));
   };
 
@@ -577,6 +618,54 @@ const MagicPainter = ({ onClose }) => {
           >
             ⬇ Speichern
           </button>
+        </div>
+      )}
+
+      {/* Log-Button (immer sichtbar) — Diagnose am Handy */}
+      <button
+        onClick={() => setShowLogs(true)}
+        className="fixed bottom-3 left-3 z-[60] bg-black/40 hover:bg-black/60 text-white
+                   rounded-full w-11 h-11 text-xl shadow-lg"
+        title="Logs anzeigen"
+      >
+        🐞
+      </button>
+
+      {/* Log-Overlay */}
+      {showLogs && (
+        <div className="fixed inset-0 bg-black/90 z-[70] flex flex-col p-4" onClick={() => setShowLogs(false)}>
+          <div
+            className="bg-neutral-900 text-green-300 rounded-2xl p-3 flex flex-col h-full max-w-md mx-auto w-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-2 text-white">
+              <span className="font-bold">🐞 Logs</span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => navigator.clipboard?.writeText(logs.join('\n')).catch(() => {})}
+                  className="bg-white/15 hover:bg-white/25 rounded-full px-3 py-1 text-sm"
+                >
+                  Kopieren
+                </button>
+                <button
+                  onClick={() => setLogs([])}
+                  className="bg-white/15 hover:bg-white/25 rounded-full px-3 py-1 text-sm"
+                >
+                  Leeren
+                </button>
+                <button onClick={() => setShowLogs(false)} className="text-2xl leading-none px-1">
+                  ✕
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto font-mono text-xs whitespace-pre-wrap break-words leading-relaxed">
+              {logs.length === 0 ? (
+                <span className="text-neutral-500">Noch keine Einträge. Mal was und tippe „Fertig ✨".</span>
+              ) : (
+                logs.map((l, i) => <div key={i}>{l}</div>)
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>

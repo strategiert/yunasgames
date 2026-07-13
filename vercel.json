@@ -2,6 +2,9 @@
   "functions": {
     "api/paint.js": {
       "maxDuration": 90
+    },
+    "api/generate-image.js": {
+      "maxDuration": 90
     }
   }
 }
