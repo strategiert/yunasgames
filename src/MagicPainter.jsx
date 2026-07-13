@@ -5,7 +5,7 @@ const CANVAS_SIZE = 1024;
 
 // Sichtbare Versions-Marke: erscheint im Log-Panel. Zeigt, ob ein Gerät eine
 // alte (Service-Worker-gecachte) App-Version fährt. Bei jeder Änderung hochziehen.
-const APP_VERSION = '2026-07-13 · logs+puzzle-fal';
+const APP_VERSION = '2026-07-13 · url-diag';
 
 const COLORS = [
   '#000000', '#ef4444', '#f97316', '#facc15', '#22c55e',
@@ -155,6 +155,7 @@ const MagicPainter = ({ onClose }) => {
       `Version ${APP_VERSION} · online=${navigator.onLine} · ` +
         `ServiceWorker=${navigator.serviceWorker?.controller ? 'aktiv' : 'aus'}`
     );
+    addLog(`URL ${window.location.origin}`);
     return () => {
       window.removeEventListener('error', onErr);
       window.removeEventListener('unhandledrejection', onErr);
@@ -280,7 +281,8 @@ const MagicPainter = ({ onClose }) => {
         signal: abort.signal,
       });
       const secs = ((Date.now() - t0) / 1000).toFixed(1);
-      addLog(`${styleKey}: Antwort ${res.status} nach ${secs}s`);
+      const vid = res.headers.get('x-vercel-id') || '?';
+      addLog(`${styleKey}: Antwort ${res.status} nach ${secs}s [${vid}]`);
       if (!res.ok) {
         // Server-Fehlertext mitloggen (z. B. "FAL_API_KEY not configured")
         const detail = await res.text().catch(() => '');
