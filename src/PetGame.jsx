@@ -12,6 +12,7 @@ import MathHero from './MathHero';
 import Game2048 from './Game2048';
 import JigsawGame from './JigsawGame';
 import GameSelect from './GameSelect';
+import MagicPainter from './MagicPainter';
 
 // Import dog images
 import dogIdleA from './assets/dog_idle_A.jpeg';
@@ -576,6 +577,11 @@ const PetGame = () => {
           onClose={(earnedCoins) => handleGameEnd(earnedCoins || 0)}
           onWin={handleGameEnd}
         />
+      )}
+
+      {/* Zauber-Maler (Kreativ-Studio, keine Münzen) */}
+      {currentGame === 'magicpainter' && (
+        <MagicPainter onClose={() => handleGameEnd(0)} />
       )}
 
       {/* Header */}

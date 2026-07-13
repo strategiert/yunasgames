@@ -105,6 +105,14 @@ const GameSelect = ({ onSelectGame, onClose }) => {
       color: 'from-pink-400 to-rose-600',
       hasDifficulty: false,
     },
+    {
+      id: 'magicpainter',
+      name: 'Zauber-Maler',
+      emoji: '🎨',
+      description: 'Male etwas und die KI zaubert 3 Bilder daraus!',
+      color: 'from-violet-400 to-fuchsia-500',
+      hasDifficulty: false,
+    },
   ];
 
   const difficulties = [
