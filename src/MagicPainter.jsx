@@ -54,7 +54,10 @@ const StyleCard = ({ styleDef, state, onRetry, onFullscreen, onDownload }) => {
       {status === 'error' && (
         <div className="aspect-square flex flex-col items-center justify-center gap-3 text-center px-2">
           <div className="text-4xl">😵‍💫</div>
-          <div className="text-white text-sm">Der Zauber hat nicht geklappt!</div>
+          <div className="text-white text-sm">
+            Der Zauber hat nicht geklappt!
+            {state?.reason && <span className="block text-white/60 text-xs mt-1">({state.reason})</span>}
+          </div>
           <button
             onClick={onRetry}
             className="bg-white/30 hover:bg-white/50 text-white font-bold py-2 px-4 rounded-full"
@@ -236,15 +239,19 @@ const MagicPainter = ({ onClose }) => {
 
   const runStyle = async (styleKey, dataUri) => {
     setResults((prev) => ({ ...prev, [styleKey]: { status: 'loading' } }));
+    // Hartes Client-Timeout: mobil darf keine Karte endlos "zaubern"
+    const abort = new AbortController();
+    const timer = setTimeout(() => abort.abort(), 90000);
     try {
       const res = await fetch('/api/paint', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image: dataUri, style: styleKey }),
+        signal: abort.signal,
       });
-      if (!res.ok) throw new Error(`API ${res.status}`);
+      if (!res.ok) throw new Error(`Fehler ${res.status}`);
       const { url } = await res.json();
-      const imgRes = await fetch(url);
+      const imgRes = await fetch(url, { signal: abort.signal });
       if (!imgRes.ok) throw new Error('Bild-Download fehlgeschlagen');
       const blob = await imgRes.blob();
       const objUrl = trackUrl(blob);
@@ -255,15 +262,31 @@ const MagicPainter = ({ onClose }) => {
       }
     } catch (err) {
       console.error(`Zauber-Maler ${styleKey}:`, err);
-      setResults((prev) => ({ ...prev, [styleKey]: { status: 'error' } }));
+      const reason = err.name === 'AbortError' ? 'Zeitüberschreitung' : err.message;
+      setResults((prev) => ({ ...prev, [styleKey]: { status: 'error', reason } }));
+    } finally {
+      clearTimeout(timer);
     }
   };
 
+  // Fürs Hochladen verkleinern: 768er-JPEG statt 1024er-PNG (~10x kleinerer Body,
+  // entscheidend auf Mobilfunk-Upload; Strichzeichnung verliert dabei nichts)
+  const exportDrawing = (canvas) => {
+    const out = document.createElement('canvas');
+    out.width = 768;
+    out.height = 768;
+    const ctx = out.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, 768, 768);
+    ctx.drawImage(canvas, 0, 0, 768, 768);
+    return out;
+  };
+
   const generate = async () => {
-    const canvas = canvasRef.current;
-    const dataUri = canvas.toDataURL('image/png');
+    const exportCanvas = exportDrawing(canvasRef.current);
+    const dataUri = exportCanvas.toDataURL('image/jpeg', 0.85);
     dataUriRef.current = dataUri;
-    const drawingBlob = await new Promise((r) => canvas.toBlob(r, 'image/png'));
+    const drawingBlob = await new Promise((r) => exportCanvas.toBlob(r, 'image/jpeg', 0.85));
 
     sessionRef.current = {
       id: crypto.randomUUID(),
