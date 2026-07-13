@@ -20,6 +20,81 @@ const STYLES = [
   { key: 'anime', label: 'Anime', emoji: '🌸' },
 ];
 
+// Außerhalb von MagicPainter definiert: PetGame re-rendert periodisch (Stats-Intervall),
+// innere Komponenten-Definitionen würden bei jedem Render remounten (Scroll-Reset, Bild-Flackern).
+const StyleCard = ({ styleDef, state, onRetry, onFullscreen, onDownload }) => {
+  const status = state?.status || 'loading';
+  return (
+    <div className="bg-white/20 rounded-2xl p-3">
+      <div className="text-white font-bold mb-2 text-center">
+        {styleDef.emoji} {styleDef.label}
+      </div>
+      {status === 'done' && (
+        <div className="relative">
+          <img
+            src={state.url}
+            alt={styleDef.label}
+            className="w-full rounded-xl cursor-pointer"
+            onClick={() => onFullscreen({ url: state.url, label: styleDef.label })}
+          />
+          <button
+            onClick={() => onDownload(state.url, styleDef.label)}
+            className="absolute bottom-2 right-2 bg-white/80 hover:bg-white rounded-full w-10 h-10 text-xl shadow"
+          >
+            ⬇
+          </button>
+        </div>
+      )}
+      {status === 'loading' && (
+        <div className="aspect-square flex flex-col items-center justify-center gap-2">
+          <div className="text-5xl animate-pulse">✨</div>
+          <div className="text-white/80 text-sm">Zaubert…</div>
+        </div>
+      )}
+      {status === 'error' && (
+        <div className="aspect-square flex flex-col items-center justify-center gap-3 text-center px-2">
+          <div className="text-4xl">😵‍💫</div>
+          <div className="text-white text-sm">Der Zauber hat nicht geklappt!</div>
+          <button
+            onClick={onRetry}
+            className="bg-white/30 hover:bg-white/50 text-white font-bold py-2 px-4 rounded-full"
+          >
+            🔁 Nochmal
+          </button>
+        </div>
+      )}
+      {status === 'missing' && (
+        <div className="aspect-square flex items-center justify-center text-white/60 text-sm">
+          Kein Bild gespeichert
+        </div>
+      )}
+    </div>
+  );
+};
+
+const Header = ({ title, onGallery, onClose, backTo }) => (
+  <div className="flex items-center justify-between mb-3">
+    {backTo ? (
+      <button onClick={backTo} className="text-white text-2xl hover:scale-110 transition-transform">
+        ←
+      </button>
+    ) : (
+      <div className="w-8" />
+    )}
+    <h2 className="text-xl font-bold text-white drop-shadow-lg">{title}</h2>
+    <div className="flex gap-2 items-center">
+      {onGallery && (
+        <button onClick={onGallery} className="text-2xl hover:scale-110 transition-transform">
+          📚
+        </button>
+      )}
+      <button onClick={onClose} className="text-white text-2xl hover:scale-110 transition-transform">
+        ✕
+      </button>
+    </div>
+  </div>
+);
+
 const MagicPainter = ({ onClose }) => {
   const [view, setView] = useState('draw'); // draw | result | gallery | session
   const [strokes, setStrokes] = useState([]);
@@ -268,81 +343,6 @@ const MagicPainter = ({ onClose }) => {
   const formatDate = (ts) =>
     new Date(ts).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' });
 
-  // --- UI-Bausteine ---
-
-  const StyleCard = ({ styleDef, state, onRetry }) => {
-    const status = state?.status || 'loading';
-    return (
-      <div className="bg-white/20 rounded-2xl p-3">
-        <div className="text-white font-bold mb-2 text-center">
-          {styleDef.emoji} {styleDef.label}
-        </div>
-        {status === 'done' && (
-          <div className="relative">
-            <img
-              src={state.url}
-              alt={styleDef.label}
-              className="w-full rounded-xl cursor-pointer"
-              onClick={() => setFullscreen({ url: state.url, label: styleDef.label })}
-            />
-            <button
-              onClick={() => download(state.url, styleDef.label)}
-              className="absolute bottom-2 right-2 bg-white/80 hover:bg-white rounded-full w-10 h-10 text-xl shadow"
-            >
-              ⬇
-            </button>
-          </div>
-        )}
-        {status === 'loading' && (
-          <div className="aspect-square flex flex-col items-center justify-center gap-2">
-            <div className="text-5xl animate-pulse">✨</div>
-            <div className="text-white/80 text-sm">Zaubert…</div>
-          </div>
-        )}
-        {status === 'error' && (
-          <div className="aspect-square flex flex-col items-center justify-center gap-3 text-center px-2">
-            <div className="text-4xl">😵‍💫</div>
-            <div className="text-white text-sm">Der Zauber hat nicht geklappt!</div>
-            <button
-              onClick={onRetry}
-              className="bg-white/30 hover:bg-white/50 text-white font-bold py-2 px-4 rounded-full"
-            >
-              🔁 Nochmal
-            </button>
-          </div>
-        )}
-        {status === 'missing' && (
-          <div className="aspect-square flex items-center justify-center text-white/60 text-sm">
-            Kein Bild gespeichert
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const Header = ({ title, showGallery, backTo }) => (
-    <div className="flex items-center justify-between mb-3">
-      {backTo ? (
-        <button onClick={backTo} className="text-white text-2xl hover:scale-110 transition-transform">
-          ←
-        </button>
-      ) : (
-        <div className="w-8" />
-      )}
-      <h2 className="text-xl font-bold text-white drop-shadow-lg">{title}</h2>
-      <div className="flex gap-2 items-center">
-        {showGallery && (
-          <button onClick={openGallery} className="text-2xl hover:scale-110 transition-transform">
-            📚
-          </button>
-        )}
-        <button onClick={onClose} className="text-white text-2xl hover:scale-110 transition-transform">
-          ✕
-        </button>
-      </div>
-    </div>
-  );
-
   // --- Views ---
 
   return (
@@ -350,7 +350,7 @@ const MagicPainter = ({ onClose }) => {
       <div className="max-w-md mx-auto p-4 min-h-full">
         {view === 'draw' && (
           <>
-            <Header title="🎨 Zauber-Maler" showGallery />
+            <Header title="🎨 Zauber-Maler" onGallery={openGallery} onClose={onClose} />
             <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
               <canvas
                 ref={canvasRef}
@@ -446,7 +446,7 @@ const MagicPainter = ({ onClose }) => {
 
         {view === 'result' && (
           <>
-            <Header title="✨ Deine Zauberbilder" showGallery />
+            <Header title="✨ Deine Zauberbilder" onGallery={openGallery} onClose={onClose} />
             {drawingPreview && (
               <div className="flex justify-center mb-3">
                 <img
@@ -463,6 +463,8 @@ const MagicPainter = ({ onClose }) => {
                   styleDef={st}
                   state={results[st.key]}
                   onRetry={() => retryStyle(st.key)}
+                  onFullscreen={setFullscreen}
+                  onDownload={download}
                 />
               ))}
             </div>
@@ -477,7 +479,11 @@ const MagicPainter = ({ onClose }) => {
 
         {view === 'gallery' && (
           <>
-            <Header title="📚 Galerie" backTo={() => setView(sessionRef.current ? 'result' : 'draw')} />
+            <Header
+              title="📚 Galerie"
+              onClose={onClose}
+              backTo={() => setView(sessionRef.current ? 'result' : 'draw')}
+            />
             {sessions && sessions.length === 0 && (
               <div className="text-center text-white/80 mt-12 text-lg">
                 Noch keine Zauberbilder —<br />mal was! 🖌
@@ -509,7 +515,7 @@ const MagicPainter = ({ onClose }) => {
 
         {view === 'session' && viewingSession && (
           <>
-            <Header title="✨ Zauberbilder" backTo={() => setView('gallery')} />
+            <Header title="✨ Zauberbilder" onClose={onClose} backTo={() => setView('gallery')} />
             <div className="flex justify-center mb-3">
               <img
                 src={viewingSession.drawingUrl}
@@ -519,7 +525,13 @@ const MagicPainter = ({ onClose }) => {
             </div>
             <div className="space-y-3">
               {viewingSession.items.map((item) => (
-                <StyleCard key={item.key} styleDef={item} state={item} />
+                <StyleCard
+                  key={item.key}
+                  styleDef={item}
+                  state={item}
+                  onFullscreen={setFullscreen}
+                  onDownload={download}
+                />
               ))}
             </div>
           </>
