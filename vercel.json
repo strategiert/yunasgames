@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/paint.js": {
+      "maxDuration": 60
+    }
+  }
+}
