@@ -24,6 +24,10 @@ const JigsawGame = ({ onClose, onWin }) => {
     const [offset, setOffset] = useState({ x: 0, y: 0 });
     const svgRef = useRef(null);
 
+    // QoL state
+    const [showPreview, setShowPreview] = useState(false);
+    const [justPlacedId, setJustPlacedId] = useState(null);
+
     // --- JIGSAW ENGINE ---
 
     // Edge with a tab/slot. `travel` (+1/-1) is the direction along the edge,
@@ -121,12 +125,19 @@ const JigsawGame = ({ onClose, onWin }) => {
         setOffset({ x: x - piece.currentX, y: y - piece.currentY });
     };
 
+    const clamp = (v, min, max) => Math.min(Math.max(v, min), max);
+
     const handleDragMove = (e) => {
         if (!draggedPiece) return;
         const { x, y } = toSvgCoords(e);
 
+        // Teile bleiben im Rahmen — sonst verliert man sie hinter dem Rand
         setPieces(prev => prev.map(p =>
-            p.id === draggedPiece.id ? { ...p, currentX: x - offset.x, currentY: y - offset.y } : p
+            p.id === draggedPiece.id ? {
+                ...p,
+                currentX: clamp(x - offset.x, -10, BOARD_WIDTH - p.width + 10),
+                currentY: clamp(y - offset.y, -10, BOARD_HEIGHT - p.height + 10),
+            } : p
         ));
     };
 
@@ -144,6 +155,11 @@ const JigsawGame = ({ onClose, onWin }) => {
             setPieces(prev => prev.map(p =>
                 p.id === piece.id ? { ...p, currentX: p.correctX, currentY: p.correctY, isPlaced: true } : p
             ));
+
+            // Snap-Feedback: kurzer weißer Blitz + Vibration am Handy
+            setJustPlacedId(piece.id);
+            setTimeout(() => setJustPlacedId(null), 600);
+            navigator.vibrate?.(40);
 
             const allPlaced = pieces.every(p => p.id === piece.id || p.isPlaced);
             if (allPlaced) {
@@ -213,8 +229,10 @@ const JigsawGame = ({ onClose, onWin }) => {
 
     // SVG has no z-index: paint order = document order.
     // Placed pieces at the bottom, dragged piece on top.
-    const pieceLayer = (p) => p.isPlaced ? 0 : (draggedPiece && p.id === draggedPiece.id ? 2 : 1);
+    // Frisch eingerastetes Teil kurz oben lassen, damit der Blitz sichtbar ist
+    const pieceLayer = (p) => p.isPlaced ? (p.id === justPlacedId ? 1.5 : 0) : (draggedPiece && p.id === draggedPiece.id ? 2 : 1);
     const orderedPieces = [...pieces].sort((a, b) => pieceLayer(a) - pieceLayer(b));
+    const placedCount = pieces.filter(p => p.isPlaced).length;
 
     return (
         <div className="fixed inset-0 bg-black/90 flex flex-col items-center justify-center z-50 overflow-hidden">
@@ -223,7 +241,13 @@ const JigsawGame = ({ onClose, onWin }) => {
             <div className="absolute top-0 w-full p-4 flex justify-between items-center z-50 bg-gradient-to-b from-black/80 to-transparent">
                 <button onClick={() => onClose(score ? Math.floor(score / 2) : 0)} className="text-white text-3xl">✕</button>
                 <h2 className="text-white font-bold text-xl drop-shadow-md">🧩 Jigsaw Fantasy</h2>
-                <div className="w-8"></div>
+                {screen === 'playing' ? (
+                    <div data-testid="piece-counter" className="bg-white/20 text-white font-bold text-sm px-3 py-1 rounded-full">
+                        {placedCount}/{pieces.length}
+                    </div>
+                ) : (
+                    <div className="w-8"></div>
+                )}
             </div>
 
             {screen === 'menu' && (
@@ -282,7 +306,8 @@ const JigsawGame = ({ onClose, onWin }) => {
             )}
 
             {screen === 'playing' && image && (
-                <div className="relative w-[300px] h-[533px] bg-white/5 shadow-2xl rounded-lg overflow-hidden border border-white/10">
+                <div className="flex flex-col items-center gap-3">
+                <div className="relative w-[300px] h-[533px] bg-white/5 shadow-2xl rounded-lg overflow-hidden border-2 border-white/20">
                     {/* Preview Helper (Faint background) */}
                     <div
                         className="absolute inset-0 opacity-20 pointer-events-none"
@@ -291,6 +316,17 @@ const JigsawGame = ({ onClose, onWin }) => {
                             backgroundSize: '100% 100%'
                         }}
                     />
+
+                    {/* Vergleichsbild: solange der Vorschau-Button gehalten wird */}
+                    {showPreview && (
+                        <img
+                            src={image}
+                            alt=""
+                            data-testid="preview-overlay"
+                            className="absolute inset-0 w-full h-full z-20 pointer-events-none"
+                            style={{ objectFit: 'fill' }}
+                        />
+                    )}
 
                     <svg
                         ref={svgRef}
@@ -331,14 +367,29 @@ const JigsawGame = ({ onClose, onWin }) => {
                                 <path
                                     d={piece.path}
                                     fill="transparent"
-                                    stroke="rgba(0,0,0,0.5)"
-                                    strokeWidth={piece.isPlaced ? 0.5 : 1}
+                                    stroke={piece.id === justPlacedId ? '#ffffff' : 'rgba(0,0,0,0.5)'}
+                                    strokeWidth={piece.id === justPlacedId ? 3 : piece.isPlaced ? 0.5 : 1}
                                     vectorEffect="non-scaling-stroke"
                                     style={{ cursor: piece.isPlaced ? 'default' : 'grab' }}
                                 />
                             </g>
                         ))}
                     </svg>
+                </div>
+
+                {/* Gedrückt halten → fertiges Bild als Orientierung */}
+                <button
+                    data-testid="preview-button"
+                    onPointerDown={(e) => { e.preventDefault(); setShowPreview(true); }}
+                    onPointerUp={() => setShowPreview(false)}
+                    onPointerLeave={() => setShowPreview(false)}
+                    onPointerCancel={() => setShowPreview(false)}
+                    onContextMenu={(e) => e.preventDefault()}
+                    className="bg-white/20 hover:bg-white/30 active:bg-white/40 text-white font-bold px-6 py-3 rounded-full select-none touch-none"
+                    style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
+                >
+                    👀 Halten für Vorschau
+                </button>
                 </div>
             )}
 
