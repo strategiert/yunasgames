@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 // Configuration
 const DIFFICULTY_SETTINGS = {
@@ -9,9 +9,54 @@ const DIFFICULTY_SETTINGS = {
 
 const BOARD_WIDTH = 300;
 const BOARD_HEIGHT = 533;
+const SNAP_TOLERANCE = 25;
+
+// Arbeitsfläche rund um den Ziel-Rahmen: Teile dort parken, ohne dass sie verschwinden
+const WORK_MARGIN = 70;
+const VIEW_W = BOARD_WIDTH + 2 * WORK_MARGIN;
+const VIEW_H = BOARD_HEIGHT + 2 * WORK_MARGIN;
+
+const fmtTime = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+
+const bestTimeFor = (difficulty) => {
+    const v = parseInt(localStorage.getItem(`jigsaw-best-${difficulty}`), 10);
+    return Number.isFinite(v) ? v : null;
+};
+
+// --- SOUNDS (WebAudio, keine Assets) ---
+let audioCtx = null;
+
+const tone = (freq, delay, dur, vol = 0.2) => {
+    const t = audioCtx.currentTime + delay;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(vol, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(t);
+    osc.stop(t + dur);
+};
+
+const playSnapSound = () => {
+    try {
+        audioCtx ||= new (window.AudioContext || window.webkitAudioContext)();
+        tone(660, 0, 0.12);
+        tone(990, 0.06, 0.15);
+    } catch { /* Audio nicht verfügbar — egal */ }
+};
+
+const playWinSound = () => {
+    try {
+        audioCtx ||= new (window.AudioContext || window.webkitAudioContext)();
+        [523, 659, 784, 1047].forEach((f, i) => tone(f, i * 0.12, 0.3));
+    } catch { /* Audio nicht verfügbar — egal */ }
+};
 
 const JigsawGame = ({ onClose, onWin }) => {
-    const [screen, setScreen] = useState('menu'); // menu, generating, playing, won
+    const [screen, setScreen] = useState('menu'); // menu, playing, won
     const [image, setImage] = useState(null);
     const [difficulty, setDifficulty] = useState('easy');
     const [pieces, setPieces] = useState([]);
@@ -27,6 +72,21 @@ const JigsawGame = ({ onClose, onWin }) => {
     // QoL state
     const [showPreview, setShowPreview] = useState(false);
     const [justPlacedId, setJustPlacedId] = useState(null);
+
+    // Timer / Highscore
+    const [elapsed, setElapsed] = useState(0);
+    const [finalTime, setFinalTime] = useState(null);
+    const [bestTime, setBestTime] = useState(null);
+    const [isNewRecord, setIsNewRecord] = useState(false);
+    const startRef = useRef(null);
+
+    useEffect(() => {
+        if (screen !== 'playing') return;
+        const iv = setInterval(() => {
+            setElapsed(Math.floor((Date.now() - startRef.current) / 1000));
+        }, 500);
+        return () => clearInterval(iv);
+    }, [screen]);
 
     // --- JIGSAW ENGINE ---
 
@@ -59,6 +119,13 @@ const JigsawGame = ({ onClose, onWin }) => {
         for (let r = 0; r < rows; r++) { vEdges[r][0] = 0; vEdges[r][cols] = 0; }
         for (let c = 0; c < cols; c++) { hEdges[0][c] = 0; hEdges[rows][c] = 0; }
 
+        // Ablage-Reihenfolge mischen
+        const trayOrder = Array.from({ length: rows * cols }, (_, i) => i);
+        for (let i = trayOrder.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [trayOrder[i], trayOrder[j]] = [trayOrder[j], trayOrder[i]];
+        }
+
         for (let r = 0; r < rows; r++) {
             for (let c = 0; c < cols; c++) {
                 const top = hEdges[r][c];
@@ -88,12 +155,14 @@ const JigsawGame = ({ onClose, onWin }) => {
                     r, c,
                     correctX: c * pieceWidth,
                     correctY: r * pieceHeight,
-                    currentX: Math.random() * (width - pieceWidth),
-                    currentY: Math.random() * (height - pieceHeight),
+                    currentX: 0,
+                    currentY: 0,
                     width: pieceWidth,
                     height: pieceHeight,
                     path: d,
                     isPlaced: false,
+                    inTray: true,
+                    trayIndex: trayOrder[r * cols + c],
                 });
             }
         }
@@ -105,40 +174,48 @@ const JigsawGame = ({ onClose, onWin }) => {
     const initGame = () => {
         const { rows, cols } = DIFFICULTY_SETTINGS[difficulty];
         setPieces(generateJigsawPaths(rows, cols, BOARD_WIDTH, BOARD_HEIGHT));
+        startRef.current = Date.now();
+        setElapsed(0);
+        setFinalTime(null);
+        setIsNewRecord(false);
         setScreen('playing');
-    };
-
-    const toSvgCoords = (e) => {
-        const touch = e.touches ? e.touches[0] : e;
-        const svgRect = svgRef.current.getBoundingClientRect();
-        return {
-            x: (touch.clientX - svgRect.left) * (BOARD_WIDTH / svgRect.width),
-            y: (touch.clientY - svgRect.top) * (BOARD_HEIGHT / svgRect.height),
-        };
-    };
-
-    const handleDragStart = (e, piece) => {
-        if (piece.isPlaced) return;
-
-        const { x, y } = toSvgCoords(e);
-        setDraggedPiece(piece);
-        setOffset({ x: x - piece.currentX, y: y - piece.currentY });
     };
 
     const clamp = (v, min, max) => Math.min(Math.max(v, min), max);
 
-    const handleDragMove = (e) => {
-        if (!draggedPiece) return;
-        const { x, y } = toSvgCoords(e);
+    const toSvgCoords = (e) => {
+        const svgRect = svgRef.current.getBoundingClientRect();
+        return {
+            x: -WORK_MARGIN + (e.clientX - svgRect.left) * (VIEW_W / svgRect.width),
+            y: -WORK_MARGIN + (e.clientY - svgRect.top) * (VIEW_H / svgRect.height),
+        };
+    };
 
-        // Teile bleiben im Rahmen — sonst verliert man sie hinter dem Rand
-        setPieces(prev => prev.map(p =>
-            p.id === draggedPiece.id ? {
-                ...p,
-                currentX: clamp(x - offset.x, -10, BOARD_WIDTH - p.width + 10),
-                currentY: clamp(y - offset.y, -10, BOARD_HEIGHT - p.height + 10),
-            } : p
-        ));
+    const clampX = (v, w) => clamp(v, -WORK_MARGIN, BOARD_WIDTH + WORK_MARGIN - w);
+    const clampY = (v, h) => clamp(v, -WORK_MARGIN, BOARD_HEIGHT + WORK_MARGIN - h);
+
+    // Teil aus der Ablage aufnehmen: erscheint zentriert unterm Finger
+    const handleTrayPick = (e, piece) => {
+        if (piece.isPlaced || draggedPiece) return;
+        e.preventDefault();
+        const { x, y } = toSvgCoords(e);
+        setOffset({ x: piece.width / 2, y: piece.height / 2 });
+        setPieces(prev => prev.map(p => p.id === piece.id ? {
+            ...p,
+            inTray: false,
+            currentX: clampX(x - piece.width / 2, p.width),
+            currentY: clampY(y - piece.height / 2, p.height),
+        } : p));
+        setDraggedPiece(piece);
+    };
+
+    // Geparktes Teil auf der Arbeitsfläche wieder aufnehmen
+    const handleBoardPick = (e, piece) => {
+        if (piece.isPlaced || draggedPiece) return;
+        e.preventDefault();
+        const { x, y } = toSvgCoords(e);
+        setOffset({ x: x - piece.currentX, y: y - piece.currentY });
+        setDraggedPiece(piece);
     };
 
     const handleDragEnd = () => {
@@ -148,31 +225,73 @@ const JigsawGame = ({ onClose, onWin }) => {
         const piece = pieces.find(p => p.id === draggedPiece.id);
         if (!piece) { setDraggedPiece(null); return; }
 
-        const tolerance = 20;
         const dist = Math.hypot(piece.currentX - piece.correctX, piece.currentY - piece.correctY);
 
-        if (dist < tolerance) {
+        if (dist < SNAP_TOLERANCE) {
             setPieces(prev => prev.map(p =>
                 p.id === piece.id ? { ...p, currentX: p.correctX, currentY: p.correctY, isPlaced: true } : p
             ));
 
-            // Snap-Feedback: kurzer weißer Blitz + Vibration am Handy
+            // Snap-Feedback: Blitz + Sound + Vibration
             setJustPlacedId(piece.id);
             setTimeout(() => setJustPlacedId(null), 600);
+            playSnapSound();
             navigator.vibrate?.(40);
 
             const allPlaced = pieces.every(p => p.id === piece.id || p.isPlaced);
             if (allPlaced) {
+                const time = Math.floor((Date.now() - startRef.current) / 1000);
+                setFinalTime(time);
+                const key = `jigsaw-best-${difficulty}`;
+                const prev = bestTimeFor(difficulty);
+                if (prev === null || time < prev) {
+                    localStorage.setItem(key, String(time));
+                    setBestTime(time);
+                    setIsNewRecord(true);
+                } else {
+                    setBestTime(prev);
+                    setIsNewRecord(false);
+                }
                 setTimeout(() => {
                     setScreen('won');
+                    playWinSound();
                     const reward = difficulty === 'hard' ? 30 : difficulty === 'medium' ? 20 : 10;
                     setScore(reward);
                 }, 500);
             }
         }
+        // Nicht getroffen → Teil bleibt liegen, wo es ist (Arbeitsfläche = Parkplatz)
 
         setDraggedPiece(null);
     };
+
+    // Drag läuft über Window-Listener: startet in der Ablage, endet auf dem Board
+    useEffect(() => {
+        if (!draggedPiece) return;
+
+        const move = (e) => {
+            e.preventDefault();
+            if (!svgRef.current) return;
+            const { x, y } = toSvgCoords(e);
+            setPieces(prev => prev.map(p =>
+                p.id === draggedPiece.id ? {
+                    ...p,
+                    currentX: clampX(x - offset.x, p.width),
+                    currentY: clampY(y - offset.y, p.height),
+                } : p
+            ));
+        };
+        const up = () => handleDragEnd();
+
+        window.addEventListener('pointermove', move, { passive: false });
+        window.addEventListener('pointerup', up);
+        window.addEventListener('pointercancel', up);
+        return () => {
+            window.removeEventListener('pointermove', move);
+            window.removeEventListener('pointerup', up);
+            window.removeEventListener('pointercancel', up);
+        };
+    });
 
     // --- API ---
 
@@ -229,10 +348,13 @@ const JigsawGame = ({ onClose, onWin }) => {
 
     // SVG has no z-index: paint order = document order.
     // Placed pieces at the bottom, dragged piece on top.
-    // Frisch eingerastetes Teil kurz oben lassen, damit der Blitz sichtbar ist
+    // Frisch eingerastetes Teil kurz oben lassen, damit der Blitz sichtbar ist.
     const pieceLayer = (p) => p.isPlaced ? (p.id === justPlacedId ? 1.5 : 0) : (draggedPiece && p.id === draggedPiece.id ? 2 : 1);
-    const orderedPieces = [...pieces].sort((a, b) => pieceLayer(a) - pieceLayer(b));
+    const boardPieces = pieces.filter(p => !p.inTray).sort((a, b) => pieceLayer(a) - pieceLayer(b));
+    const trayPieces = pieces.filter(p => p.inTray && !p.isPlaced).sort((a, b) => a.trayIndex - b.trayIndex);
     const placedCount = pieces.filter(p => p.isPlaced).length;
+    // Tab kann bis zu 25% der längeren Kante über den Teil-Rand hinausragen
+    const trayMargin = pieces.length ? Math.max(pieces[0].width, pieces[0].height) * 0.25 + 2 : 0;
 
     return (
         <div className="fixed inset-0 bg-black/90 flex flex-col items-center justify-center z-50 overflow-hidden">
@@ -242,8 +364,13 @@ const JigsawGame = ({ onClose, onWin }) => {
                 <button onClick={() => onClose(score ? Math.floor(score / 2) : 0)} className="text-white text-3xl">✕</button>
                 <h2 className="text-white font-bold text-xl drop-shadow-md">🧩 Jigsaw Fantasy</h2>
                 {screen === 'playing' ? (
-                    <div data-testid="piece-counter" className="bg-white/20 text-white font-bold text-sm px-3 py-1 rounded-full">
-                        {placedCount}/{pieces.length}
+                    <div className="flex gap-1.5">
+                        <div data-testid="piece-counter" className="bg-white/20 text-white font-bold text-sm px-2.5 py-1 rounded-full">
+                            {placedCount}/{pieces.length}
+                        </div>
+                        <div data-testid="timer" className="bg-white/20 text-white font-bold text-sm px-2.5 py-1 rounded-full">
+                            ⏱ {fmtTime(elapsed)}
+                        </div>
                     </div>
                 ) : (
                     <div className="w-8"></div>
@@ -266,6 +393,9 @@ const JigsawGame = ({ onClose, onWin }) => {
                                 className={`p-2 rounded-xl text-xs font-bold transition-all ${difficulty === d ? 'bg-pink-500 text-white' : 'bg-white/20 text-white/70'}`}
                             >
                                 {DIFFICULTY_SETTINGS[d].label}
+                                {bestTimeFor(d) !== null && (
+                                    <div className="text-[10px] font-normal mt-0.5 opacity-80">🏆 {fmtTime(bestTimeFor(d))}</div>
+                                )}
                             </button>
                         ))}
                     </div>
@@ -306,37 +436,18 @@ const JigsawGame = ({ onClose, onWin }) => {
             )}
 
             {screen === 'playing' && image && (
-                <div className="flex flex-col items-center gap-3">
-                <div className="relative w-[300px] h-[533px] bg-white/5 shadow-2xl rounded-lg overflow-hidden border-2 border-white/20">
-                    {/* Preview Helper (Faint background) */}
-                    <div
-                        className="absolute inset-0 opacity-20 pointer-events-none"
-                        style={{
-                            backgroundImage: `url(${image})`,
-                            backgroundSize: '100% 100%'
-                        }}
-                    />
-
-                    {/* Vergleichsbild: solange der Vorschau-Button gehalten wird */}
-                    {showPreview && (
-                        <img
-                            src={image}
-                            alt=""
-                            data-testid="preview-overlay"
-                            className="absolute inset-0 w-full h-full z-20 pointer-events-none"
-                            style={{ objectFit: 'fill' }}
-                        />
-                    )}
-
+                <div className="flex flex-col items-center gap-2 mt-10">
+                <div
+                    className="relative bg-white/5 shadow-2xl rounded-lg overflow-hidden border border-white/10"
+                    style={{
+                        height: `min(calc(100vh - 240px), calc(92vw * ${VIEW_H} / ${VIEW_W}), 700px)`,
+                        aspectRatio: `${VIEW_W} / ${VIEW_H}`,
+                    }}
+                >
                     <svg
                         ref={svgRef}
-                        viewBox={`0 0 ${BOARD_WIDTH} ${BOARD_HEIGHT}`}
+                        viewBox={`${-WORK_MARGIN} ${-WORK_MARGIN} ${VIEW_W} ${VIEW_H}`}
                         className="w-full h-full touch-none"
-                        onMouseMove={draggedPiece ? handleDragMove : undefined}
-                        onMouseUp={handleDragEnd}
-                        onMouseLeave={handleDragEnd}
-                        onTouchMove={handleDragMove}
-                        onTouchEnd={handleDragEnd}
                     >
                         <defs>
                             {/* Paths are in board coordinates; the clip travels with the
@@ -348,12 +459,32 @@ const JigsawGame = ({ onClose, onWin }) => {
                             ))}
                         </defs>
 
-                        {orderedPieces.map(piece => (
+                        {/* Ziel-Rahmen mit blasser Vorlage, Arbeitsfläche drum herum */}
+                        <image
+                            href={image}
+                            x="0" y="0"
+                            width={BOARD_WIDTH}
+                            height={BOARD_HEIGHT}
+                            preserveAspectRatio="none"
+                            opacity="0.15"
+                            style={{ pointerEvents: 'none' }}
+                        />
+                        <rect
+                            x="0" y="0"
+                            width={BOARD_WIDTH}
+                            height={BOARD_HEIGHT}
+                            fill="none"
+                            stroke="rgba(255,255,255,0.45)"
+                            strokeWidth="2"
+                            vectorEffect="non-scaling-stroke"
+                        />
+
+                        {boardPieces.map(piece => (
                             <g
                                 key={piece.id}
                                 transform={`translate(${piece.currentX - piece.correctX}, ${piece.currentY - piece.correctY})`}
-                                onMouseDown={(e) => handleDragStart(e, piece)}
-                                onTouchStart={(e) => handleDragStart(e, piece)}
+                                onPointerDown={(e) => handleBoardPick(e, piece)}
+                                style={{ cursor: piece.isPlaced ? 'default' : 'grab' }}
                             >
                                 <image
                                     href={image}
@@ -370,11 +501,58 @@ const JigsawGame = ({ onClose, onWin }) => {
                                     stroke={piece.id === justPlacedId ? '#ffffff' : 'rgba(0,0,0,0.5)'}
                                     strokeWidth={piece.id === justPlacedId ? 3 : piece.isPlaced ? 0.5 : 1}
                                     vectorEffect="non-scaling-stroke"
-                                    style={{ cursor: piece.isPlaced ? 'default' : 'grab' }}
                                 />
                             </g>
                         ))}
+
+                        {/* Vergleichsbild: solange der Vorschau-Button gehalten wird */}
+                        {showPreview && (
+                            <image
+                                href={image}
+                                x="0" y="0"
+                                width={BOARD_WIDTH}
+                                height={BOARD_HEIGHT}
+                                preserveAspectRatio="none"
+                                data-testid="preview-overlay"
+                                style={{ pointerEvents: 'none' }}
+                            />
+                        )}
                     </svg>
+                </div>
+
+                {/* Ablage: hier liegen die Teile, per Ziehen aufs Board setzen */}
+                <div
+                    data-testid="tray"
+                    className="w-[440px] max-w-[92vw] flex gap-2 overflow-x-auto py-2 px-2 bg-white/10 rounded-xl items-center select-none"
+                    style={{ minHeight: '68px' }}
+                >
+                    {trayPieces.length === 0 && !draggedPiece ? (
+                        <span className="text-white/50 text-xs mx-auto">Alle Teile auf dem Board! 🎉</span>
+                    ) : trayPieces.map(piece => (
+                        <svg
+                            key={piece.id}
+                            data-testid={`tray-piece-${piece.id}`}
+                            viewBox={`${piece.correctX - trayMargin} ${piece.correctY - trayMargin} ${piece.width + 2 * trayMargin} ${piece.height + 2 * trayMargin}`}
+                            className="w-14 h-14 shrink-0 cursor-grab"
+                            style={{ touchAction: 'pan-x' }}
+                            onPointerDown={(e) => handleTrayPick(e, piece)}
+                        >
+                            <defs>
+                                <clipPath id={`tray-clip-${piece.id}`}>
+                                    <path d={piece.path} />
+                                </clipPath>
+                            </defs>
+                            <image
+                                href={image}
+                                width={BOARD_WIDTH}
+                                height={BOARD_HEIGHT}
+                                preserveAspectRatio="none"
+                                clipPath={`url(#tray-clip-${piece.id})`}
+                                style={{ pointerEvents: 'none' }}
+                            />
+                            <path d={piece.path} fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+                        </svg>
+                    ))}
                 </div>
 
                 {/* Gedrückt halten → fertiges Bild als Orientierung */}
@@ -385,7 +563,7 @@ const JigsawGame = ({ onClose, onWin }) => {
                     onPointerLeave={() => setShowPreview(false)}
                     onPointerCancel={() => setShowPreview(false)}
                     onContextMenu={(e) => e.preventDefault()}
-                    className="bg-white/20 hover:bg-white/30 active:bg-white/40 text-white font-bold px-6 py-3 rounded-full select-none touch-none"
+                    className="bg-white/20 hover:bg-white/30 active:bg-white/40 text-white font-bold px-6 py-2.5 rounded-full select-none touch-none"
                     style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
                 >
                     👀 Halten für Vorschau
@@ -401,10 +579,21 @@ const JigsawGame = ({ onClose, onWin }) => {
                         <h2 className="text-3xl font-bold text-white mb-2">Puzzle Complete!</h2>
                         <p className="text-white/80 mb-6">That was amazing!</p>
 
-                        <div className="bg-white/20 rounded-xl p-4 mb-6">
+                        <div className="bg-white/20 rounded-xl p-4 mb-4">
                             <div className="text-sm uppercase font-bold text-white/70">Reward</div>
                             <div className="text-4xl font-bold text-white">+{score} 💰</div>
                         </div>
+
+                        {finalTime !== null && (
+                            <div className="bg-white/20 rounded-xl p-3 mb-6" data-testid="win-time">
+                                <div className="text-white font-bold">⏱ {fmtTime(finalTime)}</div>
+                                {isNewRecord ? (
+                                    <div className="text-white text-sm mt-1">✨ Neuer Rekord!</div>
+                                ) : bestTime !== null && (
+                                    <div className="text-white/80 text-sm mt-1">🏆 Bestzeit: {fmtTime(bestTime)}</div>
+                                )}
+                            </div>
+                        )}
 
                         <button
                             onClick={() => onWin(score)}
