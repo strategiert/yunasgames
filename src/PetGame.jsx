@@ -13,6 +13,11 @@ import Game2048 from './Game2048';
 import JigsawGame from './JigsawGame';
 import GameSelect from './GameSelect';
 import MagicPainter from './MagicPainter';
+import ProfileSelect from './ProfileSelect';
+import {
+  migrateLegacy, listProfiles, createProfile, deleteProfile, loadProfile, saveProfile,
+  getActiveProfile, setActiveProfile, clearActiveProfile,
+} from './lib/save';
 
 // Import dog images
 import dogIdleA from './assets/dog_idle_A.jpeg';
@@ -34,44 +39,31 @@ import mainroomBg from './assets/mainroom_default.png';
 import bathroomBg from './assets/bathroom_default.png';
 import playroomBg from './assets/playroom_default.png';
 
-// Spielstand überlebt App-Neustart (PWA wird am Handy oft gekillt)
-const SAVE_KEY = 'yunaPetSave-v1';
-
-const loadSave = () => {
-  try {
-    const raw = localStorage.getItem(SAVE_KEY);
-    const data = raw ? JSON.parse(raw) : null;
-    return data && data.petName ? data : null;
-  } catch {
-    return null;
-  }
-};
-
-const savedGame = loadSave();
-
-const PetGame = () => {
+// PetWorld = die Spielwelt EINES Profils. Remount per key beim Profilwechsel,
+// dadurch laufen alle useState-Initializer frisch mit dem neuen Spielstand.
+const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
   // Game states
-  const [screen, setScreen] = useState(savedGame ? 'main' : 'start');
-  const [petType, setPetType] = useState(savedGame?.petType ?? null);
-  const [petName, setPetName] = useState(savedGame?.petName ?? '');
+  const [screen, setScreen] = useState(initial.petName ? 'main' : 'choosePet');
+  const [petType, setPetType] = useState(initial.petType);
+  const [petName, setPetName] = useState(initial.petName);
   const [nameInput, setNameInput] = useState('');
-  const [coins, setCoins] = useState(savedGame?.coins ?? 20);
-  const [collarColor, setCollarColor] = useState(savedGame?.collarColor ?? '#FF6B6B');
-  const [hasBell, setHasBell] = useState(savedGame?.hasBell ?? false);
+  const [coins, setCoins] = useState(initial.coins);
+  const [collarColor, setCollarColor] = useState(initial.collarColor);
+  const [hasBell, setHasBell] = useState(initial.hasBell);
   const [mobileDisplay, setMobileDisplay] = useState(() => {
     const saved = localStorage.getItem('mobileDisplay');
     return saved ? JSON.parse(saved) : false;
   });
 
   // Pet needs (0-100)
-  const [hunger, setHunger] = useState(savedGame?.hunger ?? 80);
-  const [sleep, setSleep] = useState(savedGame?.sleep ?? 80);
-  const [fun, setFun] = useState(savedGame?.fun ?? 80);
-  const [toilet, setToilet] = useState(savedGame?.toilet ?? 80);
+  const [hunger, setHunger] = useState(initial.hunger);
+  const [sleep, setSleep] = useState(initial.sleep);
+  const [fun, setFun] = useState(initial.fun);
+  const [toilet, setToilet] = useState(initial.toilet);
 
   // Pet state
   const [isSleeping, setIsSleeping] = useState(false);
-  const [needsClean, setNeedsClean] = useState(savedGame?.needsClean ?? false);
+  const [needsClean, setNeedsClean] = useState(initial.needsClean);
   const [mood, setMood] = useState('idle'); // idle, happy, sad, sleeping, eating, drinking, playing, toilet, clean
   const [currentRoom, setCurrentRoom] = useState('main'); // main, bathroom, playroom
   const [showGameSelect, setShowGameSelect] = useState(false);
@@ -82,24 +74,17 @@ const PetGame = () => {
   const [animFrame, setAnimFrame] = useState(false);
 
   // Furniture owned
-  const [furniture, setFurniture] = useState(savedGame?.furniture ?? {
-    bed: false,
-    carpet: false,
-    poster: false,
-    plant: false,
-    bowl: true,
-    toilet: true
-  });
+  const [furniture, setFurniture] = useState(initial.furniture);
 
-  // Spielstand bei jeder Änderung sichern
+  // Spielstand bei jeder Änderung ins aktive Profil sichern
   useEffect(() => {
     if (!petName) return;
-    try {
-      localStorage.setItem(SAVE_KEY, JSON.stringify({
-        petType, petName, coins, collarColor, hasBell,
-        hunger, sleep, fun, toilet, needsClean, furniture,
-      }));
-    } catch { /* Quota voll o. ä. — Spiel läuft weiter */ }
+    saveProfile(profileId, {
+      ...initial,
+      petType, petName, coins, collarColor, hasBell,
+      hunger, sleep, fun, toilet, needsClean, furniture,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [petType, petName, coins, collarColor, hasBell, hunger, sleep, fun, toilet, needsClean, furniture]);
 
   // Android-Zurück-Geste: Overlay/Spiel schließen statt PWA beenden
@@ -316,30 +301,7 @@ const PetGame = () => {
     );
   };
 
-  // START SCREEN
-  if (screen === 'start') {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-sky-200 to-green-200 flex flex-col items-center justify-center p-4">
-        <h1 className="text-4xl font-bold text-pink-600 mb-2">Mein Tier</h1>
-        <p className="text-gray-600 mb-8">Yunas Haustier-Spiel</p>
-        <div className="mb-8">
-          <img
-            src={dogIdleA}
-            alt="Hund"
-            className="w-32 h-32 object-contain animate-bounce"
-          />
-        </div>
-        <button
-          onClick={() => setScreen('choosePet')}
-          className="bg-pink-500 hover:bg-pink-600 text-white text-xl font-bold py-4 px-8 rounded-full shadow-lg transform hover:scale-105 transition-all"
-        >
-          Spielen!
-        </button>
-      </div>
-    );
-  }
-
-  // CHOOSE PET SCREEN
+  // CHOOSE PET SCREEN (neues Profil: Tier aussuchen + benennen)
   if (screen === 'choosePet') {
     const pets = [
       { type: 'dog', image: dogHappyA, name: 'Hund' }
@@ -347,6 +309,7 @@ const PetGame = () => {
 
     return (
       <div className="min-h-screen bg-gradient-to-b from-purple-200 to-pink-200 flex flex-col items-center p-4 pt-8">
+        <button onClick={onSwitchProfile} className="self-start text-2xl mb-2">← Profile</button>
         <h2 className="text-2xl font-bold text-purple-700 mb-6">Wähle dein Tier!</h2>
 
         <div className="flex gap-4 mb-8">
@@ -631,6 +594,7 @@ const PetGame = () => {
           💰 {coins}
         </div>
         <div className={`flex ${mobileDisplay ? 'gap-1' : 'gap-2'}`}>
+          <button onClick={onSwitchProfile} title="Profil wechseln" className={`bg-white/50 rounded-full ${mobileDisplay ? 'text-lg p-1.5' : 'text-2xl p-2'}`}>👥</button>
           <button onClick={() => setScreen('collar')} className={`bg-white/50 rounded-full ${mobileDisplay ? 'text-lg p-1.5' : 'text-2xl p-2'}`}>👔</button>
           <button onClick={() => setScreen('shop')} className={`bg-white/50 rounded-full ${mobileDisplay ? 'text-lg p-1.5' : 'text-2xl p-2'}`}>🛒</button>
           <button onClick={() => setScreen('house')} className={`bg-white/50 rounded-full ${mobileDisplay ? 'text-lg p-1.5' : 'text-2xl p-2'}`}>🏠</button>
@@ -753,6 +717,51 @@ const PetGame = () => {
         </div>
       )}
     </div>
+  );
+};
+
+// Profil-Gate: erst „Wer spielt?", dann die Spielwelt des gewählten Profils
+const PetGame = () => {
+  const [activeId, setActiveId] = useState(() => {
+    migrateLegacy();
+    return getActiveProfile();
+  });
+  const [profiles, setProfiles] = useState(listProfiles);
+
+  if (!activeId) {
+    return (
+      <ProfileSelect
+        profiles={profiles}
+        onSelect={(id) => {
+          setActiveProfile(id);
+          setActiveId(id);
+        }}
+        onCreate={(name) => {
+          const id = createProfile(name);
+          if (!id) return;
+          setProfiles(listProfiles());
+          setActiveProfile(id);
+          setActiveId(id);
+        }}
+        onDelete={(id) => {
+          deleteProfile(id);
+          setProfiles(listProfiles());
+        }}
+      />
+    );
+  }
+
+  return (
+    <PetWorld
+      key={activeId}
+      profileId={activeId}
+      initial={loadProfile(activeId)}
+      onSwitchProfile={() => {
+        clearActiveProfile();
+        setProfiles(listProfiles());
+        setActiveId(null);
+      }}
+    />
   );
 };
 
