@@ -184,14 +184,15 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
   // Spielstand bei jeder Änderung ins aktive Profil sichern
   useEffect(() => {
     if (!petName) return;
+    // furniture (v1-Altfeld) läuft über ...initial unverändert mit
     saveProfile(profileId, {
       ...initial,
       petType, petName, coins, collarColor, hasBell,
-      hunger, sleep, fun, toilet, needsClean, furniture,
+      hunger, sleep, fun, toilet, needsClean,
       xp, accessory, ownedItems, decor, quests, stats, posters,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [petType, petName, coins, collarColor, hasBell, hunger, sleep, fun, toilet, needsClean, furniture, xp, accessory, ownedItems, decor, quests, stats, posters]);
+  }, [petType, petName, coins, collarColor, hasBell, hunger, sleep, fun, toilet, needsClean, xp, accessory, ownedItems, decor, quests, stats, posters]);
 
   // Android-Zurück-Geste: Overlay/Spiel schließen statt PWA beenden
   useEffect(() => {
