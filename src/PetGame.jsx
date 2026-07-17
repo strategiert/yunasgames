@@ -19,6 +19,7 @@ import {
   getActiveProfile, setActiveProfile, clearActiveProfile,
 } from './lib/save';
 import { levelForXp, xpForNextLevel, xpForLevel, XP, ACCESSORIES } from './lib/progression';
+import { ROOM_SLOTS, ITEMS, itemById, legacyFurnitureToItems } from './lib/items';
 
 // Import dog images
 import dogIdleA from './assets/dog_idle_A.jpeg';
@@ -74,8 +75,13 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
   // Animation frame toggle
   const [animFrame, setAnimFrame] = useState(false);
 
-  // Furniture owned
-  const [furniture, setFurniture] = useState(initial.furniture);
+  // Deko: gekaufte Items + Slot-Belegung. Alt-Möbel werden beim ersten Laden übernommen.
+  const [ownedItems, setOwnedItems] = useState(() =>
+    initial.ownedItems.length > 0 ? initial.ownedItems : legacyFurnitureToItems(initial.furniture)
+  );
+  const [decor, setDecor] = useState(initial.decor);
+  const [editRoom, setEditRoom] = useState(false);
+  const [slotPicker, setSlotPicker] = useState(null); // Slot-ID oder null
 
   // Fortschritt
   const [xp, setXp] = useState(initial.xp);
@@ -100,10 +106,10 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
       ...initial,
       petType, petName, coins, collarColor, hasBell,
       hunger, sleep, fun, toilet, needsClean, furniture,
-      xp, accessory,
+      xp, accessory, ownedItems, decor,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [petType, petName, coins, collarColor, hasBell, hunger, sleep, fun, toilet, needsClean, furniture, xp, accessory]);
+  }, [petType, petName, coins, collarColor, hasBell, hunger, sleep, fun, toilet, needsClean, furniture, xp, accessory, ownedItems, decor]);
 
   // Android-Zurück-Geste: Overlay/Spiel schließen statt PWA beenden
   useEffect(() => {
@@ -268,10 +274,10 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
     setShowGameSelect(false);
   };
 
-  const buyFurniture = (item, price) => {
-    if (coins >= price && !furniture[item]) {
-      setCoins(c => c - price);
-      setFurniture(f => ({ ...f, [item]: true }));
+  const buyItem = (item) => {
+    if (coins >= item.price && !ownedItems.includes(item.id) && level >= item.minLevel) {
+      setCoins(c => c - item.price);
+      setOwnedItems(o => [...o, item.id]);
     }
   };
 
@@ -478,77 +484,44 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
 
   // SHOP SCREEN
   if (screen === 'shop') {
-    const items = [
-      { id: 'bed', name: 'Bett', emoji: '🛏️', price: 10 },
-      { id: 'carpet', name: 'Teppich', emoji: '🟫', price: 8 },
-      { id: 'poster', name: 'Poster', emoji: '🖼️', price: 5 },
-      { id: 'plant', name: 'Pflanze', emoji: '🪴', price: 6 }
-    ];
-
     return (
       <div className="min-h-screen bg-gradient-to-b from-green-100 to-teal-100 p-4">
         <button onClick={() => setScreen('main')} className="text-2xl mb-4">← Zurück</button>
-        <h2 className="text-2xl font-bold text-center text-teal-700 mb-2">Möbel-Shop</h2>
-        <p className="text-center text-lg mb-6">💰 {coins} Münzen</p>
-
-        <div className="grid grid-cols-2 gap-4 max-w-sm mx-auto">
-          {items.map(item => (
-            <div key={item.id} className="bg-white rounded-2xl p-4 shadow-lg text-center">
-              <div className="text-4xl mb-2">{item.emoji}</div>
-              <div className="font-bold">{item.name}</div>
-              <div className="text-sm text-gray-500 mb-2">💰 {item.price}</div>
-              {furniture[item.id] ? (
-                <div className="text-green-500 font-bold">✓ Gekauft</div>
-              ) : (
-                <button
-                  onClick={() => buyFurniture(item.id, item.price)}
-                  disabled={coins < item.price}
-                  className={`px-4 py-2 rounded-full font-bold ${coins >= item.price
-                    ? 'bg-green-500 text-white'
-                    : 'bg-gray-300 text-gray-500'
-                    }`}
-                >
-                  Kaufen
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  // HOUSE SCREEN
-  if (screen === 'house') {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-amber-100 to-orange-100 p-4">
-        <button onClick={() => setScreen('main')} className="text-2xl mb-4">← Zurück</button>
-        <h2 className="text-2xl font-bold text-center text-amber-700 mb-6">Dein Zimmer</h2>
-
-        <div className="bg-amber-50 rounded-2xl p-6 shadow-lg max-w-sm mx-auto min-h-64 relative border-4 border-amber-300">
-          {/* Room decoration */}
-          <div className="absolute top-2 left-2 text-2xl">{furniture.poster && '🖼️'}</div>
-          <div className="absolute top-2 right-2 text-2xl">{furniture.plant && '🪴'}</div>
-          <div className="absolute bottom-2 left-2 text-2xl">{furniture.bed && '🛏️'}</div>
-          <div className="absolute bottom-2 right-2 text-2xl">{furniture.toilet && '🚽'}</div>
-          <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2">
-            {furniture.carpet && <div className="text-3xl">🟫</div>}
-          </div>
-          <div className="absolute top-1/2 left-4 text-2xl">{furniture.bowl && '🥣'}</div>
-
-          {/* Pet in center */}
-          <div className="flex items-center justify-center h-full">
-            <img
-              src={dogIdleA}
-              alt={petName}
-              className="w-24 h-24 object-contain"
-            />
-          </div>
-        </div>
-
-        <p className="text-center mt-4 text-gray-600">
-          Kaufe mehr Möbel im Shop!
+        <h2 className="text-2xl font-bold text-center text-teal-700 mb-1">Deko-Shop</h2>
+        <p className="text-center text-lg mb-1">💰 {coins} Münzen · ⭐ Level {level}</p>
+        <p className="text-center text-sm text-gray-500 mb-5">
+          Gekauftes stellst du im Zimmer mit ✏️ auf
         </p>
+
+        <div className="grid grid-cols-2 gap-3 max-w-sm mx-auto pb-8">
+          {ITEMS.map((item) => {
+            const owned = ownedItems.includes(item.id);
+            const locked = level < item.minLevel;
+            return (
+              <div key={item.id} className={`bg-white rounded-2xl p-3 shadow-lg text-center ${locked ? 'opacity-70' : ''}`}>
+                <div className={`text-4xl mb-1 ${locked ? 'grayscale' : ''}`}>{item.emoji}</div>
+                <div className="font-bold text-sm">{item.name}</div>
+                <div className="text-xs text-gray-500 mb-2">💰 {item.price}</div>
+                {owned ? (
+                  <div className="text-green-500 font-bold text-sm">✓ Gekauft</div>
+                ) : locked ? (
+                  <div className="text-gray-500 text-sm font-bold">🔒 Level {item.minLevel}</div>
+                ) : (
+                  <button
+                    onClick={() => buyItem(item)}
+                    disabled={coins < item.price}
+                    className={`px-4 py-1.5 rounded-full font-bold text-sm ${coins >= item.price
+                      ? 'bg-green-500 text-white'
+                      : 'bg-gray-300 text-gray-500'
+                      }`}
+                  >
+                    Kaufen
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
     );
   }
@@ -578,6 +551,69 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
           )}
         </div>
       )}
+
+      {/* Slot-Picker: was soll hier stehen? */}
+      {slotPicker && (() => {
+        const slotDef = Object.values(ROOM_SLOTS).flat().find((s) => s.id === slotPicker);
+        const fitting = ITEMS.filter((i) => ownedItems.includes(i.id) && i.slots.includes(slotPicker));
+        return (
+          <div
+            className="fixed inset-0 bg-black/70 z-[70] flex items-center justify-center p-4"
+            onClick={() => setSlotPicker(null)}
+          >
+            <div
+              className="bg-white rounded-3xl p-5 w-full max-w-xs shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="font-bold text-center text-lg mb-3">{slotDef?.label}</h3>
+              {fitting.length === 0 && (
+                <p className="text-center text-gray-500 text-sm mb-3">
+                  Nichts Passendes gekauft — schau in den 🛒 Shop!
+                </p>
+              )}
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  onClick={() => {
+                    setDecor((prev) => {
+                      const next = { ...prev };
+                      delete next[slotPicker];
+                      return next;
+                    });
+                    setSlotPicker(null);
+                  }}
+                  className="rounded-xl bg-gray-100 p-2 text-center"
+                >
+                  <div className="text-2xl">🚫</div>
+                  <div className="text-xs">Leer</div>
+                </button>
+                {fitting.map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      // Item kann nur an EINEM Platz stehen — anderswo wegräumen
+                      setDecor((prev) => {
+                        const next = { ...prev };
+                        Object.keys(next).forEach((k) => {
+                          if (next[k] === item.id) delete next[k];
+                        });
+                        next[slotPicker] = item.id;
+                        return next;
+                      });
+                      setSlotPicker(null);
+                    }}
+                    className={`rounded-xl p-2 text-center ${
+                      decor[slotPicker] === item.id ? 'bg-green-100 ring-2 ring-green-400' : 'bg-gray-50'
+                    }`}
+                  >
+                    <div className="text-2xl">{item.emoji}</div>
+                    <div className="text-xs truncate">{item.name}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Game Selection Modal */}
       {showGameSelect && (
@@ -698,7 +734,6 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
           <button onClick={onSwitchProfile} title="Profil wechseln" className={`bg-white/50 rounded-full ${mobileDisplay ? 'text-lg p-1.5' : 'text-2xl p-2'}`}>👥</button>
           <button onClick={() => setScreen('collar')} className={`bg-white/50 rounded-full ${mobileDisplay ? 'text-lg p-1.5' : 'text-2xl p-2'}`}>👔</button>
           <button onClick={() => setScreen('shop')} className={`bg-white/50 rounded-full ${mobileDisplay ? 'text-lg p-1.5' : 'text-2xl p-2'}`}>🛒</button>
-          <button onClick={() => setScreen('house')} className={`bg-white/50 rounded-full ${mobileDisplay ? 'text-lg p-1.5' : 'text-2xl p-2'}`}>🏠</button>
           <button
             onClick={toggleMobileDisplay}
             className={`rounded-full transition-colors ${mobileDisplay ? 'bg-green-400 text-base p-1.5' : 'bg-white/50 text-xl p-2'
@@ -756,6 +791,36 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
         <div className="flex justify-center items-center h-full py-4">
           {renderPet()}
         </div>
+
+        {/* Deko in den Slots des aktuellen Raums */}
+        {(ROOM_SLOTS[currentRoom] || []).map((slot) => {
+          const placed = decor[slot.id] ? itemById(decor[slot.id]) : null;
+          if (!editRoom && !placed) return null;
+          return (
+            <button
+              key={slot.id}
+              onClick={() => editRoom && setSlotPicker(slot.id)}
+              className={`absolute ${slot.pos} ${mobileDisplay ? 'text-2xl' : 'text-4xl'} ${
+                editRoom
+                  ? 'bg-white/50 border-2 border-dashed border-white rounded-xl px-1.5 py-0.5 animate-pulse'
+                  : 'pointer-events-none'
+              }`}
+              title={slot.label}
+            >
+              {placed ? placed.emoji : '➕'}
+            </button>
+          );
+        })}
+
+        {/* Zimmer einrichten */}
+        <button
+          onClick={() => setEditRoom((e) => !e)}
+          className={`absolute top-2 left-1/2 -translate-x-1/2 rounded-full shadow
+                      ${editRoom ? 'bg-green-400' : 'bg-white/60'} ${mobileDisplay ? 'text-base p-1.5' : 'text-xl p-2'}`}
+          title="Zimmer einrichten"
+        >
+          {editRoom ? '✔️' : '✏️'}
+        </button>
 
         {/* Needs cleaning indicator */}
         {needsClean && (
