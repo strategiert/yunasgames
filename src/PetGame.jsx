@@ -18,6 +18,7 @@ import {
   migrateLegacy, listProfiles, createProfile, deleteProfile, loadProfile, saveProfile,
   getActiveProfile, setActiveProfile, clearActiveProfile,
 } from './lib/save';
+import { levelForXp, xpForNextLevel, xpForLevel, XP, ACCESSORIES } from './lib/progression';
 
 // Import dog images
 import dogIdleA from './assets/dog_idle_A.jpeg';
@@ -76,6 +77,22 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
   // Furniture owned
   const [furniture, setFurniture] = useState(initial.furniture);
 
+  // Fortschritt
+  const [xp, setXp] = useState(initial.xp);
+  const [accessory, setAccessory] = useState(initial.accessory);
+  const [levelUp, setLevelUp] = useState(null); // frisch erreichtes Level fürs Overlay
+  const level = levelForXp(xp);
+
+  const addXp = (amount) => {
+    setXp((prev) => {
+      const next = prev + amount;
+      const before = levelForXp(prev);
+      const after = levelForXp(next);
+      if (after > before) setLevelUp(after);
+      return next;
+    });
+  };
+
   // Spielstand bei jeder Änderung ins aktive Profil sichern
   useEffect(() => {
     if (!petName) return;
@@ -83,9 +100,10 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
       ...initial,
       petType, petName, coins, collarColor, hasBell,
       hunger, sleep, fun, toilet, needsClean, furniture,
+      xp, accessory,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [petType, petName, coins, collarColor, hasBell, hunger, sleep, fun, toilet, needsClean, furniture]);
+  }, [petType, petName, coins, collarColor, hasBell, hunger, sleep, fun, toilet, needsClean, furniture, xp, accessory]);
 
   // Android-Zurück-Geste: Overlay/Spiel schließen statt PWA beenden
   useEffect(() => {
@@ -109,6 +127,13 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
     }, 500);
     return () => clearInterval(animInterval);
   }, []);
+
+  // Level-Up-Feier automatisch schließen
+  useEffect(() => {
+    if (!levelUp) return;
+    const t = setTimeout(() => setLevelUp(null), 4000);
+    return () => clearTimeout(t);
+  }, [levelUp]);
 
   // Decrease needs over time
   useEffect(() => {
@@ -169,6 +194,7 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
       setCoins(c => c - 1);
       setHunger(h => Math.min(100, h + 25));
       setMood('eating');
+      addXp(XP.care);
       setTimeout(() => setMood('happy'), 2000);
     }
   };
@@ -179,6 +205,7 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
       setHunger(h => Math.min(100, h + 15));
       setFun(f => Math.min(100, f + 10));
       setMood('drinking');
+      addXp(XP.care);
       setTimeout(() => setMood('happy'), 2000);
     }
   };
@@ -190,6 +217,7 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
       setSleep(100);
       setIsSleeping(false);
       setMood('happy');
+      addXp(XP.care);
     }, 3000);
   };
 
@@ -200,6 +228,7 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
       setToilet(100);
       setNeedsClean(true);
       setMood('clean');
+      addXp(XP.care);
     }, 1500);
   };
 
@@ -208,6 +237,7 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
     setCoins(c => c + 2);
     setMood('happy');
     setCurrentRoom('main');
+    addXp(XP.care);
   };
 
   const play = () => {
@@ -229,6 +259,9 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
     setCoins(c => c + earnedCoins);
     setMood('happy');
     setCurrentRoom('main');
+    // Ohne Münzgewinn (abgebrochen/verloren) nur Trost-XP — sonst wäre
+    // Spiel-auf-zu-auf-zu eine XP-Maschine
+    addXp(earnedCoins > 0 ? XP.gameBase + XP.perCoin * earnedCoins : 3);
   };
 
   const handleGameSelectClose = () => {
@@ -289,6 +322,12 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
           {isSleeping && (
             <div className={`absolute -top-2 -right-2 animate-bounce ${mobileDisplay ? 'text-2xl' : 'text-3xl'}`}>
               💤
+            </div>
+          )}
+          {/* Accessoire */}
+          {accessory && (
+            <div className={`absolute -top-1 -left-1 ${mobileDisplay ? 'text-2xl' : 'text-4xl'}`}>
+              {ACCESSORIES.find((a) => a.id === accessory)?.emoji}
             </div>
           )}
         </div>
@@ -398,6 +437,40 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
               {hasBell ? '🔔 An' : '🔕 Aus'}
             </button>
           </div>
+
+          <h3 className="font-bold mb-3 mt-6">Accessoires (durch Level freigeschaltet):</h3>
+          <div className="flex gap-3 justify-center flex-wrap">
+            <button
+              onClick={() => setAccessory(null)}
+              className={`w-12 h-12 rounded-full bg-gray-100 text-xl ${
+                accessory === null ? 'ring-4 ring-gray-400 scale-110' : ''
+              }`}
+              title="Kein Accessoire"
+            >
+              🚫
+            </button>
+            {ACCESSORIES.map((a) => {
+              const unlocked = level >= a.minLevel;
+              return (
+                <button
+                  key={a.id}
+                  onClick={() => unlocked && setAccessory(a.id)}
+                  disabled={!unlocked}
+                  className={`w-12 h-12 rounded-full text-xl relative ${
+                    unlocked ? 'bg-yellow-100' : 'bg-gray-200 grayscale opacity-60'
+                  } ${accessory === a.id ? 'ring-4 ring-yellow-400 scale-110' : ''}`}
+                  title={unlocked ? a.label : `${a.label} — ab Level ${a.minLevel}`}
+                >
+                  {a.emoji}
+                  {!unlocked && (
+                    <span className="absolute -bottom-1 -right-1 text-[10px] bg-gray-500 text-white rounded-full px-1">
+                      L{a.minLevel}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
     );
@@ -483,6 +556,29 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
   // MAIN GAME SCREEN
   return (
     <div className={`min-h-screen bg-gradient-to-b from-sky-200 to-green-300 ${mobileDisplay ? 'p-2' : 'p-4'}`}>
+      {/* Level-Up-Feier */}
+      {levelUp && (
+        <div
+          className="fixed inset-0 bg-black/60 z-[80] flex flex-col items-center justify-center"
+          onClick={() => setLevelUp(null)}
+        >
+          <div className="text-6xl animate-bounce mb-2">🎉</div>
+          <div className="text-white text-4xl font-bold drop-shadow-lg mb-1">Level {levelUp}!</div>
+          <div className="text-white/80 text-lg mb-4">{petName} wird immer besser!</div>
+          <div className="flex gap-3 text-4xl">
+            <span className="animate-bounce" style={{ animationDelay: '0ms' }}>🎊</span>
+            <span className="animate-bounce" style={{ animationDelay: '150ms' }}>⭐</span>
+            <span className="animate-bounce" style={{ animationDelay: '300ms' }}>🎊</span>
+          </div>
+          {ACCESSORIES.some((a) => a.minLevel === levelUp) && (
+            <div className="mt-4 bg-white/20 text-white px-4 py-2 rounded-full">
+              Neu freigeschaltet: {ACCESSORIES.find((a) => a.minLevel === levelUp).emoji}{' '}
+              {ACCESSORIES.find((a) => a.minLevel === levelUp).label} — im 👔-Shop!
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Game Selection Modal */}
       {showGameSelect && (
         <GameSelect onSelectGame={handleGameSelect} onClose={handleGameSelectClose} />
@@ -590,8 +686,13 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
 
       {/* Header */}
       <div className={`flex justify-between items-center ${mobileDisplay ? 'mb-2' : 'mb-4'}`}>
-        <div className={`bg-yellow-400 rounded-full font-bold shadow ${mobileDisplay ? 'px-3 py-1 text-sm' : 'px-4 py-2'}`}>
-          💰 {coins}
+        <div className={`flex items-center ${mobileDisplay ? 'gap-1' : 'gap-2'}`}>
+          <div className={`bg-yellow-400 rounded-full font-bold shadow ${mobileDisplay ? 'px-3 py-1 text-sm' : 'px-4 py-2'}`}>
+            💰 {coins}
+          </div>
+          <div className={`bg-violet-400 text-white rounded-full font-bold shadow ${mobileDisplay ? 'px-3 py-1 text-sm' : 'px-4 py-2'}`}>
+            ⭐ {level}
+          </div>
         </div>
         <div className={`flex ${mobileDisplay ? 'gap-1' : 'gap-2'}`}>
           <button onClick={onSwitchProfile} title="Profil wechseln" className={`bg-white/50 rounded-full ${mobileDisplay ? 'text-lg p-1.5' : 'text-2xl p-2'}`}>👥</button>
@@ -615,6 +716,21 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
         <StatusBar label="Schlaf" value={sleep} color="#3B82F6" icon="😴" compact={mobileDisplay} />
         <StatusBar label="Spaß" value={fun} color="#F59E0B" icon="⭐" compact={mobileDisplay} />
         <StatusBar label="Toilette" value={toilet} color="#8B5CF6" icon="🚽" compact={mobileDisplay} />
+        {/* XP bis zum nächsten Level */}
+        <div className={`flex items-center gap-2 ${mobileDisplay ? 'mt-1' : 'mt-2'}`}>
+          <span className={mobileDisplay ? 'text-sm' : 'text-lg'}>⭐</span>
+          <div className={`flex-1 bg-gray-200 rounded-full overflow-hidden ${mobileDisplay ? 'h-3' : 'h-4'}`}>
+            <div
+              className="h-full bg-violet-500 transition-all duration-500 rounded-full"
+              style={{
+                width: `${Math.round(((xp - xpForLevel(level)) / (xpForNextLevel(level) - xpForLevel(level))) * 100)}%`,
+              }}
+            />
+          </div>
+          <span className={`${mobileDisplay ? 'text-[10px]' : 'text-xs'} whitespace-nowrap`}>
+            Level {level}
+          </span>
+        </div>
       </div>
 
       {/* Pet display area with background image */}
