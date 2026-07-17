@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { MAX_PROFILES } from './lib/save';
-import dogIdleA from './assets/dog_idle_A.jpeg';
+import dogIdleA from './assets/welpe_idle_A.png';
 
 const ProfileSelect = ({ profiles, onSelect, onCreate, onDelete }) => {
   const [creating, setCreating] = useState(false);

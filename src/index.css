@@ -90,3 +90,47 @@ html, body, #root {
 .app-frame-inner::-webkit-scrollbar {
   display: none;
 }
+
+/* ─── Spiel-Animationen (Hauptspiel v2.1) ─── */
+
+/* Ruhiges Atmen/Wippen im Leerlauf */
+@keyframes pet-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+.pet-bob { animation: pet-bob 2.4s ease-in-out infinite; }
+
+/* Fröhliches Hüpfen */
+@keyframes pet-hop {
+  0%, 100% { transform: translateY(0); }
+  30% { transform: translateY(-14px) rotate(-3deg); }
+  60% { transform: translateY(0); }
+  80% { transform: translateY(-7px) rotate(2deg); }
+}
+.pet-hop { animation: pet-hop 1s ease-in-out infinite; }
+
+/* Mampfen/Schlabbern */
+@keyframes pet-nom {
+  0%, 100% { transform: rotate(0); }
+  25% { transform: rotate(-4deg) translateY(2px); }
+  75% { transform: rotate(3deg); }
+}
+.pet-nom { animation: pet-nom 0.7s ease-in-out infinite; }
+
+/* Sanfter Raumwechsel */
+@keyframes room-fade {
+  from { opacity: 0.2; }
+  to { opacity: 1; }
+}
+.room-fade { animation: room-fade 0.45s ease-out; }
+
+/* Aufsteigende Belohnungs-Zahlen (+5 ⭐ / +4 💰) */
+@keyframes floaty-up {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(-70px) scale(1.15); }
+}
+.floaty { animation: floaty-up 1.5s ease-out forwards; }
+
+/* Tipp-Feedback auf Aktions-Buttons */
+.action-grid button { transition: transform 0.1s ease; }
+.action-grid button:active { transform: scale(0.93); }

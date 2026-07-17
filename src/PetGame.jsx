@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import MiniGame from './MiniGame';
 import TicTacToe from './TicTacToe';
 import ShapeFall from './ShapeFall';
@@ -43,6 +43,26 @@ import dogCleanA from './assets/dog_clean_A.jpeg';
 import mainroomBg from './assets/mainroom_default.png';
 import bathroomBg from './assets/bathroom_default.png';
 import playroomBg from './assets/playroom_default.png';
+
+// Welpen-Frames (Level 1-3): gleiche Posen, kleiner Hund
+import welpeIdleA from './assets/welpe_idle_A.png';
+import welpeIdleB from './assets/welpe_idle_B.png';
+import welpeHappyA from './assets/welpe_happy_A.png';
+import welpeHappyB from './assets/welpe_happy_B.png';
+import welpeSadA from './assets/welpe_sad_A.png';
+import welpeSadB from './assets/welpe_sad_B.png';
+import welpeEatA from './assets/welpe_eat_A.png';
+import welpeEatB from './assets/welpe_eat_B.png';
+import welpeDrinkA from './assets/welpe_drink_A.png';
+import welpeDrinkB from './assets/welpe_drink_B.png';
+import welpeSleepA from './assets/welpe_sleep_A.png';
+import welpePlayA from './assets/welpe_play_A.png';
+import welpeToiletA from './assets/welpe_toilet_A.png';
+import welpeToiletB from './assets/welpe_toilet_B.png';
+import welpeCleanA from './assets/welpe_clean_A.png';
+
+// Ab diesem Level ist der Welpe ausgewachsen
+const GROWN_UP_LEVEL = 4;
 
 // PetWorld = die Spielwelt EINES Profils. Remount per key beim Profilwechsel,
 // dadurch laufen alle useState-Initializer frisch mit dem neuen Spielstand.
@@ -92,7 +112,17 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
   const [levelUp, setLevelUp] = useState(null); // frisch erreichtes Level fürs Overlay
   const level = levelForXp(xp);
 
+  // Aufsteigende Belohnungs-Zahlen über dem Tier
+  const [floaties, setFloaties] = useState([]);
+  const floatyIdRef = useRef(0);
+  const showFloaty = (text) => {
+    const id = ++floatyIdRef.current;
+    setFloaties((f) => [...f, { id, text }]);
+    setTimeout(() => setFloaties((f) => f.filter((x) => x.id !== id)), 1600);
+  };
+
   const addXp = (amount) => {
+    showFloaty(`+${amount} ⭐`);
     setXp((prev) => {
       const next = prev + amount;
       const before = levelForXp(prev);
@@ -165,6 +195,7 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
     const allDone = questsForDate(quests.date).every((qq) => claimed[qq.id]);
     const grantBonus = allDone && !quests.bonusClaimed;
     setCoins((c) => c + q.reward);
+    showFloaty(`+${q.reward} 💰`);
     addXp(XP.quest + (grantBonus ? XP.dailyBonus : 0));
     setQuests({ ...quests, claimed, bonusClaimed: quests.bonusClaimed || allDone });
     if (grantBonus) {
@@ -256,9 +287,10 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
     }
   }, [hunger, sleep, fun, toilet, isSleeping, needsClean]);
 
-  // Get current pet image based on mood and animation frame
+  // Get current pet image based on mood, growth stage and animation frame
+  const isPuppy = level < GROWN_UP_LEVEL;
   const getPetImage = () => {
-    const images = {
+    const grown = {
       idle: [dogIdleA, dogIdleB],
       happy: [dogHappyA, dogHappyB],
       sad: [dogSadA, dogSadB],
@@ -269,7 +301,18 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
       toilet: [dogToiletA, dogToiletB],
       clean: [dogCleanA, dogCleanA]
     };
-
+    const puppy = {
+      idle: [welpeIdleA, welpeIdleB],
+      happy: [welpeHappyA, welpeHappyB],
+      sad: [welpeSadA, welpeSadB],
+      sleeping: [welpeSleepA, welpeSleepA],
+      eating: [welpeEatA, welpeEatB],
+      drinking: [welpeDrinkA, welpeDrinkB],
+      playing: [welpePlayA, welpeHappyA],
+      toilet: [welpeToiletA, welpeToiletB],
+      clean: [welpeCleanA, welpeCleanA]
+    };
+    const images = isPuppy ? puppy : grown;
     const frames = images[mood] || images.idle;
     return animFrame ? frames[1] : frames[0];
   };
@@ -355,6 +398,7 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
     setCoins(c => c + earnedCoins);
     setMood('happy');
     setCurrentRoom('main');
+    if (earnedCoins > 0) showFloaty(`+${earnedCoins} 💰`);
     // Ohne Münzgewinn (abgebrochen/verloren) nur Trost-XP — sonst wäre
     // Spiel-auf-zu-auf-zu eine XP-Maschine
     addXp(earnedCoins > 0 ? XP.gameBase + XP.perCoin * earnedCoins : 3);
@@ -405,17 +449,26 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
 
   // Render pet with real images
   const renderPet = () => {
+    // Stimmung steuert die Bewegung: hüpfen, mampfen oder ruhig wippen
+    const moodAnim = isSleeping
+      ? ''
+      : mood === 'happy' || mood === 'playing'
+        ? 'pet-hop'
+        : mood === 'eating' || mood === 'drinking'
+          ? 'pet-nom'
+          : 'pet-bob';
+    const sizeClass = mobileDisplay
+      ? isPuppy ? 'w-20 h-20' : 'w-28 h-28'
+      : isPuppy ? 'w-36 h-36' : 'w-48 h-48';
     return (
-      <div className="relative flex flex-col items-center">
+      <div className={`relative flex flex-col items-center ${moodAnim}`}>
         {/* Pet Image */}
         <div className="relative">
           <img
             src={getPetImage()}
             alt={petName}
-            className={`object-contain transition-transform duration-300 ${mobileDisplay ? 'w-28 h-28' : 'w-48 h-48'
-              }`}
+            className={`object-contain transition-all duration-300 ${sizeClass}`}
             style={{
-              transform: mood === 'playing' ? 'scale(1.1) rotate(5deg)' : 'scale(1)',
               filter: isSleeping ? 'brightness(0.7)' : 'none'
             }}
           />
@@ -444,7 +497,7 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
   // CHOOSE PET SCREEN (neues Profil: Tier aussuchen + benennen)
   if (screen === 'choosePet') {
     const pets = [
-      { type: 'dog', image: dogHappyA, name: 'Hund' }
+      { type: 'dog', image: welpeHappyA, name: 'Hund' }
     ];
 
     return (
@@ -630,9 +683,13 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
           className="fixed inset-0 bg-black/60 z-[80] flex flex-col items-center justify-center"
           onClick={() => setLevelUp(null)}
         >
-          <div className="text-6xl animate-bounce mb-2">🎉</div>
+          <div className="text-6xl animate-bounce mb-2">{levelUp === GROWN_UP_LEVEL ? '🐕' : '🎉'}</div>
           <div className="text-white text-4xl font-bold drop-shadow-lg mb-1">Level {levelUp}!</div>
-          <div className="text-white/80 text-lg mb-4">{petName} wird immer besser!</div>
+          <div className="text-white/80 text-lg mb-4">
+            {levelUp === GROWN_UP_LEVEL
+              ? `${petName} ist groß geworden! 🐾`
+              : `${petName} wird immer besser!`}
+          </div>
           <div className="flex gap-3 text-4xl">
             <span className="animate-bounce" style={{ animationDelay: '0ms' }}>🎊</span>
             <span className="animate-bounce" style={{ animationDelay: '150ms' }}>⭐</span>
@@ -931,7 +988,8 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
 
       {/* Pet display area with background image */}
       <div
-        className={`rounded-2xl shadow-lg relative overflow-hidden transition-all duration-500 ${mobileDisplay ? 'p-3 mb-2' : 'p-6 mb-4'
+        key={currentRoom}
+        className={`room-fade rounded-2xl shadow-lg relative overflow-hidden transition-all duration-500 ${mobileDisplay ? 'p-3 mb-2' : 'p-6 mb-4'
           }`}
         style={{
           backgroundImage: `url(${currentRoom === 'bathroom' ? bathroomBg :
@@ -951,6 +1009,23 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
         {/* Pet */}
         <div className="flex justify-center items-center h-full py-4">
           {renderPet()}
+        </div>
+
+        {/* Belohnungs-Floaties */}
+        <div className="absolute inset-0 pointer-events-none flex justify-center">
+          {floaties.map((f, i) => (
+            <span
+              key={f.id}
+              className="floaty absolute text-xl font-bold text-white"
+              style={{
+                top: '38%',
+                marginLeft: `${((f.id % 3) - 1) * 40}px`,
+                textShadow: '0 1px 4px rgba(0,0,0,0.5)',
+              }}
+            >
+              {f.text}
+            </span>
+          ))}
         </div>
 
         {/* Poster an der Wand rechts (Hauptraum) */}
@@ -1006,7 +1081,7 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
       </div>
 
       {/* Action buttons */}
-      <div className={`grid grid-cols-3 ${mobileDisplay ? 'gap-1.5' : 'gap-3'}`}>
+      <div className={`action-grid grid grid-cols-3 ${mobileDisplay ? 'gap-1.5' : 'gap-3'}`}>
         <button
           onClick={feed}
           disabled={coins < 1 || isSleeping}
