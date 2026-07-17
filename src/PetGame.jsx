@@ -20,6 +20,7 @@ import {
 } from './lib/save';
 import { levelForXp, xpForNextLevel, xpForLevel, XP, ACCESSORIES } from './lib/progression';
 import { ROOM_SLOTS, ITEMS, itemById, legacyFurnitureToItems } from './lib/items';
+import { questsForDate, freshQuestState, dateKey, yesterdayKey } from './lib/quests';
 
 // Import dog images
 import dogIdleA from './assets/dog_idle_A.jpeg';
@@ -99,6 +100,55 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
     });
   };
 
+  // Tages-Quests + Lebenszeit-Statistik (fürs Album)
+  const [quests, setQuests] = useState(() =>
+    initial.quests?.date === dateKey() ? initial.quests : freshQuestState()
+  );
+  const [stats, setStats] = useState(initial.stats);
+  const [showQuests, setShowQuests] = useState(false);
+
+  const STAT_KEY = {
+    feed: 'feeds', drink: 'drinks', sleep: 'sleeps', clean: 'cleans',
+    game: 'games', win: 'wins', earn: 'coinsEarned', draw: 'drawings',
+  };
+
+  const trackEvent = (event, amount = 1) => {
+    setStats((prev) => ({ ...prev, [STAT_KEY[event]]: (prev[STAT_KEY[event]] || 0) + amount }));
+    setQuests((prev) => {
+      const progress = { ...prev.progress };
+      let changed = false;
+      questsForDate(prev.date).forEach((q) => {
+        if (q.event === event && !prev.claimed[q.id]) {
+          progress[q.id] = Math.min(q.target, (progress[q.id] || 0) + amount);
+          changed = true;
+        }
+      });
+      return changed ? { ...prev, progress } : prev;
+    });
+  };
+
+  const claimQuest = (q) => {
+    if (quests.claimed[q.id] || (quests.progress[q.id] || 0) < q.target) return;
+    const claimed = { ...quests.claimed, [q.id]: true };
+    const allDone = questsForDate(quests.date).every((qq) => claimed[qq.id]);
+    const grantBonus = allDone && !quests.bonusClaimed;
+    setCoins((c) => c + q.reward);
+    addXp(XP.quest + (grantBonus ? XP.dailyBonus : 0));
+    setQuests({ ...quests, claimed, bonusClaimed: quests.bonusClaimed || allDone });
+    if (grantBonus) {
+      // Streak: gestern auch alles geschafft → weiterzählen, sonst bei 1 anfangen
+      setStats((prev) => ({
+        ...prev,
+        streak: prev.lastAllDoneDate === yesterdayKey() ? (prev.streak || 0) + 1 : 1,
+        bestStreak: Math.max(
+          prev.bestStreak || 0,
+          prev.lastAllDoneDate === yesterdayKey() ? (prev.streak || 0) + 1 : 1
+        ),
+        lastAllDoneDate: quests.date,
+      }));
+    }
+  };
+
   // Spielstand bei jeder Änderung ins aktive Profil sichern
   useEffect(() => {
     if (!petName) return;
@@ -106,10 +156,10 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
       ...initial,
       petType, petName, coins, collarColor, hasBell,
       hunger, sleep, fun, toilet, needsClean, furniture,
-      xp, accessory, ownedItems, decor,
+      xp, accessory, ownedItems, decor, quests, stats,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [petType, petName, coins, collarColor, hasBell, hunger, sleep, fun, toilet, needsClean, furniture, xp, accessory, ownedItems, decor]);
+  }, [petType, petName, coins, collarColor, hasBell, hunger, sleep, fun, toilet, needsClean, furniture, xp, accessory, ownedItems, decor, quests, stats]);
 
   // Android-Zurück-Geste: Overlay/Spiel schließen statt PWA beenden
   useEffect(() => {
@@ -201,6 +251,7 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
       setHunger(h => Math.min(100, h + 25));
       setMood('eating');
       addXp(XP.care);
+      trackEvent('feed');
       setTimeout(() => setMood('happy'), 2000);
     }
   };
@@ -212,6 +263,7 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
       setFun(f => Math.min(100, f + 10));
       setMood('drinking');
       addXp(XP.care);
+      trackEvent('drink');
       setTimeout(() => setMood('happy'), 2000);
     }
   };
@@ -224,6 +276,7 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
       setIsSleeping(false);
       setMood('happy');
       addXp(XP.care);
+      trackEvent('sleep');
     }, 3000);
   };
 
@@ -244,6 +297,7 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
     setMood('happy');
     setCurrentRoom('main');
     addXp(XP.care);
+    trackEvent('clean');
   };
 
   const play = () => {
@@ -258,7 +312,7 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
     setGameDifficulty(difficulty);
   };
 
-  const handleGameEnd = (earnedCoins) => {
+  const handleGameEnd = (earnedCoins, countsAsGame = true) => {
     setCurrentGame(null);
     setGameDifficulty(null);
     setFun(f => Math.min(100, f + 30));
@@ -268,6 +322,11 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
     // Ohne Münzgewinn (abgebrochen/verloren) nur Trost-XP — sonst wäre
     // Spiel-auf-zu-auf-zu eine XP-Maschine
     addXp(earnedCoins > 0 ? XP.gameBase + XP.perCoin * earnedCoins : 3);
+    if (countsAsGame) trackEvent('game');
+    if (earnedCoins > 0) {
+      trackEvent('win');
+      trackEvent('earn', earnedCoins);
+    }
   };
 
   const handleGameSelectClose = () => {
@@ -715,9 +774,9 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
         />
       )}
 
-      {/* Zauber-Maler (Kreativ-Studio, keine Münzen) */}
+      {/* Zauber-Maler (Kreativ-Studio, keine Münzen, zählt nicht als Minispiel) */}
       {currentGame === 'magicpainter' && (
-        <MagicPainter onClose={() => handleGameEnd(0)} />
+        <MagicPainter onClose={() => handleGameEnd(0, false)} onDrawing={() => trackEvent('draw')} />
       )}
 
       {/* Header */}
@@ -767,6 +826,60 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
           </span>
         </div>
       </div>
+
+      {/* Tages-Quests */}
+      {(() => {
+        const todaysQuests = questsForDate(quests.date);
+        const doneCount = todaysQuests.filter((q) => quests.claimed[q.id]).length;
+        return (
+          <div className={`bg-white/80 rounded-2xl shadow-lg ${mobileDisplay ? 'p-2 mb-2' : 'p-3 mb-4'}`}>
+            <button
+              onClick={() => setShowQuests((s) => !s)}
+              className="w-full flex items-center justify-between font-bold"
+            >
+              <span className={mobileDisplay ? 'text-sm' : ''}>
+                📋 Tagesaufgaben {doneCount}/3
+                {(stats.streak || 0) > 1 && <span className="ml-2">🔥 {stats.streak}</span>}
+              </span>
+              <span>{showQuests ? '▴' : '▾'}</span>
+            </button>
+            {showQuests && (
+              <div className="mt-2 space-y-2">
+                {todaysQuests.map((q) => {
+                  const prog = Math.min(q.target, quests.progress[q.id] || 0);
+                  const claimed = quests.claimed[q.id];
+                  const ready = !claimed && prog >= q.target;
+                  return (
+                    <div key={q.id} className={`flex items-center gap-2 rounded-xl px-2 py-1.5 ${claimed ? 'bg-green-50' : 'bg-gray-50'}`}>
+                      <span className="text-xl">{q.icon}</span>
+                      <span className={`flex-1 text-sm ${claimed ? 'line-through text-gray-400' : ''}`}>
+                        {q.label}
+                      </span>
+                      {claimed ? (
+                        <span className="text-green-500 font-bold">✓</span>
+                      ) : ready ? (
+                        <button
+                          onClick={() => claimQuest(q)}
+                          className="bg-green-500 text-white text-xs font-bold px-3 py-1 rounded-full animate-pulse"
+                        >
+                          💰{q.reward} Holen!
+                        </button>
+                      ) : (
+                        <span className="text-xs text-gray-500 font-bold">{prog}/{q.target}</span>
+                      )}
+                    </div>
+                  );
+                })}
+                {quests.bonusClaimed && (
+                  <div className="text-center text-xs text-violet-600 font-bold">
+                    🎉 Alles geschafft — Bonus-XP kassiert!
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Pet display area with background image */}
       <div

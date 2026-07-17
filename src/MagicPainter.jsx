@@ -118,7 +118,7 @@ const Header = ({ title, onGallery, onClose, confirmExit, backTo }) => (
   </div>
 );
 
-const MagicPainter = ({ onClose }) => {
+const MagicPainter = ({ onClose, onDrawing }) => {
   const [view, setView] = useState('draw'); // draw | result | gallery | session
   const [strokes, setStrokes] = useState(loadDraft);
   const [color, setColor] = useState('#000000');
@@ -379,6 +379,7 @@ const MagicPainter = ({ onClose }) => {
     setDrawingPreview(trackUrl(drawingBlob));
     setResults({});
     setView('result');
+    onDrawing?.(); // Quest-/Statistik-Zähler im Hauptspiel
     addLog(`Zeichnung fertig (${Math.round(dataUri.length / 1024)} KB), starte 3 Stile …`);
     STYLES.forEach((s) => runStyle(s.key, dataUri));
   };
