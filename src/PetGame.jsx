@@ -14,6 +14,8 @@ import JigsawGame from './JigsawGame';
 import GameSelect from './GameSelect';
 import MagicPainter from './MagicPainter';
 import ProfileSelect from './ProfileSelect';
+import Album from './Album';
+import { listSessions } from './lib/galleryDb';
 import {
   migrateLegacy, listProfiles, createProfile, deleteProfile, loadProfile, saveProfile,
   getActiveProfile, setActiveProfile, clearActiveProfile,
@@ -107,6 +109,36 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
   const [stats, setStats] = useState(initial.stats);
   const [showQuests, setShowQuests] = useState(false);
 
+  // Poster (Zauber-Maler-Bild an der Wand rechts) + Album
+  const [posters, setPosters] = useState(initial.posters);
+  const [posterUrl, setPosterUrl] = useState(null);
+  const [showAlbum, setShowAlbum] = useState(false);
+
+  useEffect(() => {
+    let url = null;
+    let cancelled = false;
+    (async () => {
+      const p = posters.wandRechts;
+      if (!p) {
+        setPosterUrl(null);
+        return;
+      }
+      const sessions = await listSessions();
+      const s = sessions.find((x) => x.id === p.sessionId);
+      const blob = s?.results?.[p.styleKey] || s?.drawing;
+      if (blob && !cancelled) {
+        url = URL.createObjectURL(blob);
+        setPosterUrl(url);
+      } else if (!cancelled) {
+        setPosterUrl(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [posters]);
+
   const STAT_KEY = {
     feed: 'feeds', drink: 'drinks', sleep: 'sleeps', clean: 'cleans',
     game: 'games', win: 'wins', earn: 'coinsEarned', draw: 'drawings',
@@ -156,10 +188,10 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
       ...initial,
       petType, petName, coins, collarColor, hasBell,
       hunger, sleep, fun, toilet, needsClean, furniture,
-      xp, accessory, ownedItems, decor, quests, stats,
+      xp, accessory, ownedItems, decor, quests, stats, posters,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [petType, petName, coins, collarColor, hasBell, hunger, sleep, fun, toilet, needsClean, furniture, xp, accessory, ownedItems, decor, quests, stats]);
+  }, [petType, petName, coins, collarColor, hasBell, hunger, sleep, fun, toilet, needsClean, furniture, xp, accessory, ownedItems, decor, quests, stats, posters]);
 
   // Android-Zurück-Geste: Overlay/Spiel schließen statt PWA beenden
   useEffect(() => {
@@ -170,6 +202,9 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
       setCurrentGame(null);
       setGameDifficulty(null);
       setCurrentRoom('main');
+      setShowAlbum(false);
+      setSlotPicker(null);
+      setLevelUp(null);
       setScreen(s => (s === 'start' || s === 'choosePet' ? s : 'main'));
     };
     window.addEventListener('popstate', onPop);
@@ -611,6 +646,17 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
         </div>
       )}
 
+      {/* Sammelalbum */}
+      {showAlbum && (
+        <Album
+          level={level}
+          stats={stats}
+          poster={posters.wandRechts}
+          onSetPoster={(p) => setPosters((prev) => ({ ...prev, wandRechts: p || undefined }))}
+          onClose={() => setShowAlbum(false)}
+        />
+      )}
+
       {/* Slot-Picker: was soll hier stehen? */}
       {slotPicker && (() => {
         const slotDef = Object.values(ROOM_SLOTS).flat().find((s) => s.id === slotPicker);
@@ -793,6 +839,7 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
           <button onClick={onSwitchProfile} title="Profil wechseln" className={`bg-white/50 rounded-full ${mobileDisplay ? 'text-lg p-1.5' : 'text-2xl p-2'}`}>👥</button>
           <button onClick={() => setScreen('collar')} className={`bg-white/50 rounded-full ${mobileDisplay ? 'text-lg p-1.5' : 'text-2xl p-2'}`}>👔</button>
           <button onClick={() => setScreen('shop')} className={`bg-white/50 rounded-full ${mobileDisplay ? 'text-lg p-1.5' : 'text-2xl p-2'}`}>🛒</button>
+          <button onClick={() => setShowAlbum(true)} title="Sammelalbum" className={`bg-white/50 rounded-full ${mobileDisplay ? 'text-lg p-1.5' : 'text-2xl p-2'}`}>📖</button>
           <button
             onClick={toggleMobileDisplay}
             className={`rounded-full transition-colors ${mobileDisplay ? 'bg-green-400 text-base p-1.5' : 'bg-white/50 text-xl p-2'
@@ -905,9 +952,20 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
           {renderPet()}
         </div>
 
+        {/* Poster an der Wand rechts (Hauptraum) */}
+        {currentRoom === 'main' && posterUrl && (
+          <img
+            src={posterUrl}
+            alt="Poster"
+            className={`absolute top-2 right-2 rounded-lg border-4 border-amber-100 shadow-lg object-cover
+                        ${mobileDisplay ? 'w-12 h-12' : 'w-20 h-20'}`}
+          />
+        )}
+
         {/* Deko in den Slots des aktuellen Raums */}
         {(ROOM_SLOTS[currentRoom] || []).map((slot) => {
           const placed = decor[slot.id] ? itemById(decor[slot.id]) : null;
+          if (slot.id === 'wandRechts' && posterUrl) return null; // Poster hat Vorrang
           if (!editRoom && !placed) return null;
           return (
             <button
