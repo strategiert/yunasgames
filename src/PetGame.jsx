@@ -44,6 +44,14 @@ import mainroomBg from './assets/mainroom_default.png';
 import bathroomBg from './assets/bathroom_default.png';
 import playroomBg from './assets/playroom_default.png';
 
+// Raum-Themes (level-gated, per fal aus den Standard-Räumen generiert)
+import mainroomNacht from './assets/mainroom_nacht.jpeg';
+import bathroomNacht from './assets/bathroom_nacht.jpeg';
+import playroomNacht from './assets/playroom_nacht.jpeg';
+import mainroomDschungel from './assets/mainroom_dschungel.jpeg';
+import bathroomDschungel from './assets/bathroom_dschungel.jpeg';
+import playroomDschungel from './assets/playroom_dschungel.jpeg';
+
 // Welpen-Frames (Level 1-3): gleiche Posen, kleiner Hund
 import welpeIdleA from './assets/welpe_idle_A.png';
 import welpeIdleB from './assets/welpe_idle_B.png';
@@ -63,6 +71,18 @@ import welpeCleanA from './assets/welpe_clean_A.png';
 
 // Ab diesem Level ist der Welpe ausgewachsen
 const GROWN_UP_LEVEL = 4;
+
+const ROOM_THEMES = [
+  { id: 'default', label: 'Normal', emoji: '🏡', minLevel: 1 },
+  { id: 'nacht', label: 'Nacht', emoji: '🌙', minLevel: 5 },
+  { id: 'dschungel', label: 'Dschungel', emoji: '🌴', minLevel: 8 },
+];
+
+const ROOM_BGS = {
+  default: { main: mainroomBg, bathroom: bathroomBg, playroom: playroomBg },
+  nacht: { main: mainroomNacht, bathroom: bathroomNacht, playroom: playroomNacht },
+  dschungel: { main: mainroomDschungel, bathroom: bathroomDschungel, playroom: playroomDschungel },
+};
 
 // PetWorld = die Spielwelt EINES Profils. Remount per key beim Profilwechsel,
 // dadurch laufen alle useState-Initializer frisch mit dem neuen Spielstand.
@@ -105,6 +125,8 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
   const [decor, setDecor] = useState(initial.decor);
   const [editRoom, setEditRoom] = useState(false);
   const [slotPicker, setSlotPicker] = useState(null); // Slot-ID oder null
+  const [roomTheme, setRoomTheme] = useState(initial.roomTheme);
+  const [themePicker, setThemePicker] = useState(false);
 
   // Fortschritt
   const [xp, setXp] = useState(initial.xp);
@@ -220,10 +242,10 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
       ...initial,
       petType, petName, coins, collarColor, hasBell,
       hunger, sleep, fun, toilet, needsClean,
-      xp, accessory, ownedItems, decor, quests, stats, posters,
+      xp, accessory, ownedItems, decor, quests, stats, posters, roomTheme,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [petType, petName, coins, collarColor, hasBell, hunger, sleep, fun, toilet, needsClean, xp, accessory, ownedItems, decor, quests, stats, posters]);
+  }, [petType, petName, coins, collarColor, hasBell, hunger, sleep, fun, toilet, needsClean, xp, accessory, ownedItems, decor, quests, stats, posters, roomTheme]);
 
   // Android-Zurück-Geste: Overlay/Spiel schließen statt PWA beenden
   useEffect(() => {
@@ -236,6 +258,7 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
       setCurrentRoom('main');
       setShowAlbum(false);
       setSlotPicker(null);
+      setThemePicker(false);
       setLevelUp(null);
       setScreen(s => (s === 'start' || s === 'choosePet' ? s : 'main'));
     };
@@ -715,6 +738,47 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
         />
       )}
 
+      {/* Raum-Stil wählen */}
+      {themePicker && (
+        <div
+          className="fixed inset-0 bg-black/70 z-[70] flex items-center justify-center p-4"
+          onClick={() => setThemePicker(false)}
+        >
+          <div
+            className="bg-white rounded-3xl p-5 w-full max-w-xs shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="font-bold text-center text-lg mb-3">🎨 Raum-Stil</h3>
+            <div className="space-y-2">
+              {ROOM_THEMES.map((t) => {
+                const unlocked = level >= t.minLevel;
+                return (
+                  <button
+                    key={t.id}
+                    disabled={!unlocked}
+                    onClick={() => {
+                      setRoomTheme(t.id);
+                      setThemePicker(false);
+                    }}
+                    className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 ${
+                      roomTheme === t.id
+                        ? 'bg-green-100 ring-2 ring-green-400'
+                        : unlocked ? 'bg-gray-50' : 'bg-gray-100 opacity-60'
+                    }`}
+                  >
+                    <span className={`text-2xl ${unlocked ? '' : 'grayscale'}`}>{t.emoji}</span>
+                    <span className="flex-1 text-left font-bold text-sm">{t.label}</span>
+                    {!unlocked && (
+                      <span className="text-xs text-gray-500 font-bold">🔒 Level {t.minLevel}</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Slot-Picker: was soll hier stehen? */}
       {slotPicker && (() => {
         const slotDef = Object.values(ROOM_SLOTS).flat().find((s) => s.id === slotPicker);
@@ -988,14 +1052,11 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
 
       {/* Pet display area with background image */}
       <div
-        key={currentRoom}
+        key={currentRoom + roomTheme}
         className={`room-fade rounded-2xl shadow-lg relative overflow-hidden transition-all duration-500 ${mobileDisplay ? 'p-3 mb-2' : 'p-6 mb-4'
           }`}
         style={{
-          backgroundImage: `url(${currentRoom === 'bathroom' ? bathroomBg :
-            currentRoom === 'playroom' ? playroomBg :
-              mainroomBg
-            })`,
+          backgroundImage: `url(${(ROOM_BGS[roomTheme] || ROOM_BGS.default)[currentRoom]})`,
           backgroundSize: 'cover',
           backgroundPosition: 'center',
           minHeight: mobileDisplay ? '160px' : '250px'
@@ -1068,6 +1129,16 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
         >
           {editRoom ? '✔️' : '✏️'}
         </button>
+        {editRoom && (
+          <button
+            onClick={() => setThemePicker(true)}
+            className={`absolute top-2 left-1/2 translate-x-6 rounded-full shadow bg-white/60
+                        ${mobileDisplay ? 'text-base p-1.5' : 'text-xl p-2'}`}
+            title="Raum-Stil wählen"
+          >
+            🎨
+          </button>
+        )}
 
         {/* Needs cleaning indicator */}
         {needsClean && (

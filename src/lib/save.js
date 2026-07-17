@@ -36,6 +36,7 @@ export function defaultState() {
     furniture: { bed: false, carpet: false, poster: false, plant: false, bowl: true, toilet: true },
     xp: 0,
     accessory: null,
+    roomTheme: 'default',
     decor: {},
     ownedItems: [],
     posters: {},
