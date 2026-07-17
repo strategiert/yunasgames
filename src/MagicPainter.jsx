@@ -5,7 +5,18 @@ const CANVAS_SIZE = 1024;
 
 // Sichtbare Versions-Marke: erscheint im Log-Panel. Zeigt, ob ein Gerät eine
 // alte (Service-Worker-gecachte) App-Version fährt. Bei jeder Änderung hochziehen.
-const APP_VERSION = '2026-07-13 · url-diag';
+const APP_VERSION = '2026-07-17 · autosave';
+
+// Angefangene Zeichnung überlebt Fehl-Klick / App-Neustart
+const DRAFT_KEY = 'zauberMalerDraft-v1';
+
+const loadDraft = () => {
+  try {
+    return JSON.parse(localStorage.getItem(DRAFT_KEY)) || [];
+  } catch {
+    return [];
+  }
+};
 
 const COLORS = [
   '#000000', '#ef4444', '#f97316', '#facc15', '#22c55e',
@@ -79,7 +90,7 @@ const StyleCard = ({ styleDef, state, onRetry, onFullscreen, onDownload }) => {
   );
 };
 
-const Header = ({ title, onGallery, onClose, backTo }) => (
+const Header = ({ title, onGallery, onClose, confirmExit, backTo }) => (
   <div className="flex items-center justify-between mb-3">
     {backTo ? (
       <button onClick={backTo} className="text-white text-2xl hover:scale-110 transition-transform">
@@ -95,8 +106,13 @@ const Header = ({ title, onGallery, onClose, backTo }) => (
           📚
         </button>
       )}
-      <button onClick={onClose} className="text-white text-2xl hover:scale-110 transition-transform">
-        ✕
+      <button
+        onClick={onClose}
+        className={`text-white hover:scale-110 transition-transform ${
+          confirmExit ? 'text-sm font-bold bg-red-500/70 rounded-full px-3 py-1' : 'text-2xl'
+        }`}
+      >
+        {confirmExit ? 'Wirklich? ✕' : '✕'}
       </button>
     </div>
   </div>
@@ -104,11 +120,12 @@ const Header = ({ title, onGallery, onClose, backTo }) => (
 
 const MagicPainter = ({ onClose }) => {
   const [view, setView] = useState('draw'); // draw | result | gallery | session
-  const [strokes, setStrokes] = useState([]);
+  const [strokes, setStrokes] = useState(loadDraft);
   const [color, setColor] = useState('#000000');
   const [size, setSize] = useState(SIZES[1].px);
   const [eraser, setEraser] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [confirmExit, setConfirmExit] = useState(false);
   const [results, setResults] = useState({}); // key -> {status, url}
   const [drawingPreview, setDrawingPreview] = useState(null);
   const [fullscreen, setFullscreen] = useState(null); // {url, label}
@@ -161,6 +178,29 @@ const MagicPainter = ({ onClose }) => {
       window.removeEventListener('unhandledrejection', onErr);
     };
   }, [addLog]);
+
+  // Draft nach jedem Strich sichern (Koordinaten gerundet, spart localStorage-Platz)
+  useEffect(() => {
+    try {
+      const slim = strokes.map((s) => ({
+        ...s,
+        points: s.points.map((p) => ({ x: Math.round(p.x), y: Math.round(p.y) })),
+      }));
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(slim));
+    } catch { /* Quota voll — dann eben ohne Draft */ }
+  }, [strokes]);
+
+  // ✕ braucht zweiten Tipp, wenn Zeichnung offen oder Zauber noch läuft
+  const generating = Object.values(results).some((r) => r?.status === 'loading');
+  const handleClose = () => {
+    const risky = (view === 'draw' && strokes.length > 0) || (view === 'result' && generating);
+    if (risky && !confirmExit) {
+      setConfirmExit(true);
+      setTimeout(() => setConfirmExit(false), 2500);
+      return;
+    }
+    onClose();
+  };
 
   // --- Canvas ---
 
@@ -416,7 +456,7 @@ const MagicPainter = ({ onClose }) => {
       <div className="max-w-md mx-auto p-4 min-h-full">
         {view === 'draw' && (
           <>
-            <Header title="🎨 Zauber-Maler" onGallery={openGallery} onClose={onClose} />
+            <Header title="🎨 Zauber-Maler" onGallery={openGallery} onClose={handleClose} confirmExit={confirmExit} />
             <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
               <canvas
                 ref={canvasRef}
@@ -512,7 +552,7 @@ const MagicPainter = ({ onClose }) => {
 
         {view === 'result' && (
           <>
-            <Header title="✨ Deine Zauberbilder" onGallery={openGallery} onClose={onClose} />
+            <Header title="✨ Deine Zauberbilder" onGallery={openGallery} onClose={handleClose} confirmExit={confirmExit} />
             {drawingPreview && (
               <div className="flex justify-center mb-3">
                 <img
@@ -547,7 +587,7 @@ const MagicPainter = ({ onClose }) => {
           <>
             <Header
               title="📚 Galerie"
-              onClose={onClose}
+              onClose={handleClose}
               backTo={() => setView(sessionRef.current ? 'result' : 'draw')}
             />
             {sessions && sessions.length === 0 && (
@@ -581,7 +621,7 @@ const MagicPainter = ({ onClose }) => {
 
         {view === 'session' && viewingSession && (
           <>
-            <Header title="✨ Zauberbilder" onClose={onClose} backTo={() => setView('gallery')} />
+            <Header title="✨ Zauberbilder" onClose={handleClose} backTo={() => setView('gallery')} />
             <div className="flex justify-center mb-3">
               <img
                 src={viewingSession.drawingUrl}

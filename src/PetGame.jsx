@@ -34,29 +34,44 @@ import mainroomBg from './assets/mainroom_default.png';
 import bathroomBg from './assets/bathroom_default.png';
 import playroomBg from './assets/playroom_default.png';
 
+// Spielstand überlebt App-Neustart (PWA wird am Handy oft gekillt)
+const SAVE_KEY = 'yunaPetSave-v1';
+
+const loadSave = () => {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    const data = raw ? JSON.parse(raw) : null;
+    return data && data.petName ? data : null;
+  } catch {
+    return null;
+  }
+};
+
+const savedGame = loadSave();
+
 const PetGame = () => {
   // Game states
-  const [screen, setScreen] = useState('start');
-  const [petType, setPetType] = useState(null);
-  const [petName, setPetName] = useState('');
+  const [screen, setScreen] = useState(savedGame ? 'main' : 'start');
+  const [petType, setPetType] = useState(savedGame?.petType ?? null);
+  const [petName, setPetName] = useState(savedGame?.petName ?? '');
   const [nameInput, setNameInput] = useState('');
-  const [coins, setCoins] = useState(20);
-  const [collarColor, setCollarColor] = useState('#FF6B6B');
-  const [hasBell, setHasBell] = useState(false);
+  const [coins, setCoins] = useState(savedGame?.coins ?? 20);
+  const [collarColor, setCollarColor] = useState(savedGame?.collarColor ?? '#FF6B6B');
+  const [hasBell, setHasBell] = useState(savedGame?.hasBell ?? false);
   const [mobileDisplay, setMobileDisplay] = useState(() => {
     const saved = localStorage.getItem('mobileDisplay');
     return saved ? JSON.parse(saved) : false;
   });
 
   // Pet needs (0-100)
-  const [hunger, setHunger] = useState(80);
-  const [sleep, setSleep] = useState(80);
-  const [fun, setFun] = useState(80);
-  const [toilet, setToilet] = useState(80);
+  const [hunger, setHunger] = useState(savedGame?.hunger ?? 80);
+  const [sleep, setSleep] = useState(savedGame?.sleep ?? 80);
+  const [fun, setFun] = useState(savedGame?.fun ?? 80);
+  const [toilet, setToilet] = useState(savedGame?.toilet ?? 80);
 
   // Pet state
   const [isSleeping, setIsSleeping] = useState(false);
-  const [needsClean, setNeedsClean] = useState(false);
+  const [needsClean, setNeedsClean] = useState(savedGame?.needsClean ?? false);
   const [mood, setMood] = useState('idle'); // idle, happy, sad, sleeping, eating, drinking, playing, toilet, clean
   const [currentRoom, setCurrentRoom] = useState('main'); // main, bathroom, playroom
   const [showGameSelect, setShowGameSelect] = useState(false);
@@ -67,7 +82,7 @@ const PetGame = () => {
   const [animFrame, setAnimFrame] = useState(false);
 
   // Furniture owned
-  const [furniture, setFurniture] = useState({
+  const [furniture, setFurniture] = useState(savedGame?.furniture ?? {
     bed: false,
     carpet: false,
     poster: false,
@@ -75,6 +90,32 @@ const PetGame = () => {
     bowl: true,
     toilet: true
   });
+
+  // Spielstand bei jeder Änderung sichern
+  useEffect(() => {
+    if (!petName) return;
+    try {
+      localStorage.setItem(SAVE_KEY, JSON.stringify({
+        petType, petName, coins, collarColor, hasBell,
+        hunger, sleep, fun, toilet, needsClean, furniture,
+      }));
+    } catch { /* Quota voll o. ä. — Spiel läuft weiter */ }
+  }, [petType, petName, coins, collarColor, hasBell, hunger, sleep, fun, toilet, needsClean, furniture]);
+
+  // Android-Zurück-Geste: Overlay/Spiel schließen statt PWA beenden
+  useEffect(() => {
+    window.history.pushState({ yuna: true }, '');
+    const onPop = () => {
+      window.history.pushState({ yuna: true }, '');
+      setShowGameSelect(false);
+      setCurrentGame(null);
+      setGameDifficulty(null);
+      setCurrentRoom('main');
+      setScreen(s => (s === 'start' || s === 'choosePet' ? s : 'main'));
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
 
   // Animation timer - toggle between A and B frames
   useEffect(() => {
