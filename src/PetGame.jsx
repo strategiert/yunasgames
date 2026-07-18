@@ -24,22 +24,25 @@ import { levelForXp, xpForNextLevel, xpForLevel, XP, ACCESSORIES } from './lib/p
 import { ROOM_SLOTS, ITEMS, itemById, legacyFurnitureToItems } from './lib/items';
 import { questsForDate, freshQuestState, dateKey, yesterdayKey } from './lib/quests';
 
-// Import dog images
-import dogIdleA from './assets/dog_idle_A.jpeg';
-import dogIdleB from './assets/dog_idle_B.jpeg';
-import dogHappyA from './assets/dog_happy_A.jpeg';
-import dogHappyB from './assets/dog_happy_B.jpeg';
-import dogSadA from './assets/dog_sad_A.jpeg';
-import dogSadB from './assets/dog_sad_B.jpeg';
-import dogEatA from './assets/dog_eat_A.jpeg';
-import dogEatB from './assets/dog_eat_B.jpeg';
-import dogDrinkA from './assets/dog_drink_A.jpeg';
-import dogDrinkB from './assets/dog_drink_B.jpeg';
-import dogSleepA from './assets/dog_sleep_A.jpeg';
-import dogPlayA from './assets/dog_play_A.jpeg';
-import dogToiletA from './assets/dog_toilet_A.jpeg';
-import dogToiletB from './assets/dog_toilet_B.jpeg';
-import dogCleanA from './assets/dog_clean_A.jpeg';
+// Tier-Frames im Tom-Look (3D-Render, 19.07.2026); alte dog_/welpe_-Assets
+// bleiben im Repo als Quellposen für künftige Generierungen.
+import dogIdleA from './assets/tom_idle_A.png';
+import dogIdleB from './assets/tom_idle_B.png';
+import dogHappyA from './assets/tom_happy_A.png';
+import dogHappyB from './assets/tom_happy_B.png';
+import dogSadA from './assets/tom_sad_A.png';
+import dogSadB from './assets/tom_sad_B.png';
+import dogEatA from './assets/tom_eat_A.png';
+import dogEatB from './assets/tom_eat_B.png';
+import dogDrinkA from './assets/tom_drink_A.png';
+import dogDrinkB from './assets/tom_drink_B.png';
+import dogSleepA from './assets/tom_sleep_A.png';
+import dogPlayA from './assets/tom_play_A.png';
+import dogToiletA from './assets/tom_toilet_A.png';
+import dogToiletB from './assets/tom_toilet_B.png';
+import dogCleanA from './assets/tom_clean_A.png';
+import { sfx, isMuted, setMuted } from './lib/sfx';
+import { startRecording, playAsDog } from './lib/parrot';
 import mainroomBg from './assets/mainroom_default.png';
 import bathroomBg from './assets/bathroom_default.png';
 import playroomBg from './assets/playroom_default.png';
@@ -53,21 +56,21 @@ import bathroomDschungel from './assets/bathroom_dschungel.jpeg';
 import playroomDschungel from './assets/playroom_dschungel.jpeg';
 
 // Welpen-Frames (Level 1-3): gleiche Posen, kleiner Hund
-import welpeIdleA from './assets/welpe_idle_A.png';
-import welpeIdleB from './assets/welpe_idle_B.png';
-import welpeHappyA from './assets/welpe_happy_A.png';
-import welpeHappyB from './assets/welpe_happy_B.png';
-import welpeSadA from './assets/welpe_sad_A.png';
-import welpeSadB from './assets/welpe_sad_B.png';
-import welpeEatA from './assets/welpe_eat_A.png';
-import welpeEatB from './assets/welpe_eat_B.png';
-import welpeDrinkA from './assets/welpe_drink_A.png';
-import welpeDrinkB from './assets/welpe_drink_B.png';
-import welpeSleepA from './assets/welpe_sleep_A.png';
-import welpePlayA from './assets/welpe_play_A.png';
-import welpeToiletA from './assets/welpe_toilet_A.png';
-import welpeToiletB from './assets/welpe_toilet_B.png';
-import welpeCleanA from './assets/welpe_clean_A.png';
+import welpeIdleA from './assets/tomwelpe_idle_A.png';
+import welpeIdleB from './assets/tomwelpe_idle_B.png';
+import welpeHappyA from './assets/tomwelpe_happy_A.png';
+import welpeHappyB from './assets/tomwelpe_happy_B.png';
+import welpeSadA from './assets/tomwelpe_sad_A.png';
+import welpeSadB from './assets/tomwelpe_sad_B.png';
+import welpeEatA from './assets/tomwelpe_eat_A.png';
+import welpeEatB from './assets/tomwelpe_eat_B.png';
+import welpeDrinkA from './assets/tomwelpe_drink_A.png';
+import welpeDrinkB from './assets/tomwelpe_drink_B.png';
+import welpeSleepA from './assets/tomwelpe_sleep_A.png';
+import welpePlayA from './assets/tomwelpe_play_A.png';
+import welpeToiletA from './assets/tomwelpe_toilet_A.png';
+import welpeToiletB from './assets/tomwelpe_toilet_B.png';
+import welpeCleanA from './assets/tomwelpe_clean_A.png';
 
 // Ab diesem Level ist der Welpe ausgewachsen
 const GROWN_UP_LEVEL = 4;
@@ -154,6 +157,57 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
     });
   };
 
+  // Streicheln + Nachsprechen + Ton
+  const [petting, setPetting] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [talking, setTalking] = useState(false);
+  const [muted, setMutedState] = useState(isMuted);
+  const recRef = useRef(null);
+
+  const toggleMute = () => {
+    setMuted(!muted);
+    setMutedState(!muted);
+  };
+
+  const petThePet = () => {
+    if (isSleeping || petting) return;
+    setPetting(true);
+    setMood('happy');
+    showFloaty(['💕', '💖', '✨', '🐾'][Math.floor(Math.random() * 4)]);
+    Math.random() < 0.4 ? sfx.bark() : sfx.giggle();
+    setTimeout(() => {
+      setPetting(false);
+      setMood('idle');
+    }, 1200);
+  };
+
+  const micDown = async () => {
+    if (recording || talking) return;
+    try {
+      recRef.current = await startRecording();
+      setRecording(true);
+    } catch {
+      showFloaty('🎤 aus 😢');
+    }
+  };
+
+  const micUp = async () => {
+    if (!recRef.current) return;
+    const rec = recRef.current;
+    recRef.current = null;
+    setRecording(false);
+    const blob = await rec.stop();
+    if (!blob || blob.size < 2000) return; // zu kurz — nur Tipp statt Sprechen
+    setTalking(true);
+    setMood('happy');
+    try {
+      await playAsDog(blob);
+    } finally {
+      setTalking(false);
+      setMood('idle');
+    }
+  };
+
   // Tages-Quests + Lebenszeit-Statistik (fürs Album)
   const [quests, setQuests] = useState(() =>
     initial.quests?.date === dateKey() ? initial.quests : freshQuestState()
@@ -218,6 +272,7 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
     const grantBonus = allDone && !quests.bonusClaimed;
     setCoins((c) => c + q.reward);
     showFloaty(`+${q.reward} 💰`);
+    sfx.coin();
     addXp(XP.quest + (grantBonus ? XP.dailyBonus : 0));
     setQuests({ ...quests, claimed, bonusClaimed: quests.bonusClaimed || allDone });
     if (grantBonus) {
@@ -277,6 +332,7 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
   // Level-Up-Feier automatisch schließen
   useEffect(() => {
     if (!levelUp) return;
+    sfx.levelUp();
     const t = setTimeout(() => setLevelUp(null), 4000);
     return () => clearTimeout(t);
   }, [levelUp]);
@@ -356,6 +412,7 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
       setCoins(c => c - 1);
       setHunger(h => Math.min(100, h + 25));
       setMood('eating');
+      sfx.munch();
       addXp(XP.care);
       trackEvent('feed');
       setTimeout(() => setMood('happy'), 2000);
@@ -368,6 +425,7 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
       setHunger(h => Math.min(100, h + 15));
       setFun(f => Math.min(100, f + 10));
       setMood('drinking');
+      sfx.munch();
       addXp(XP.care);
       trackEvent('drink');
       setTimeout(() => setMood('happy'), 2000);
@@ -377,6 +435,7 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
   const goSleep = () => {
     setIsSleeping(true);
     setMood('sleeping');
+    sfx.snore();
     setTimeout(() => {
       setSleep(100);
       setIsSleeping(false);
@@ -437,7 +496,10 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
       : 0;
     const total = earnedCoins + timeCoins;
     setCoins(c => c + total);
-    if (total > 0) showFloaty(`+${total} 💰`);
+    if (total > 0) {
+      showFloaty(`+${total} 💰`);
+      sfx.coin();
+    }
     addXp(total > 0 ? XP.gameBase + XP.perCoin * total : 3);
     if (countsAsGame) trackEvent('game');
     if (earnedCoins > 0) trackEvent('win');
@@ -462,23 +524,6 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
     localStorage.setItem('mobileDisplay', JSON.stringify(newValue));
   };
 
-  // Status bar component
-  const StatusBar = ({ label, value, color, icon, compact }) => (
-    <div className={`flex items-center gap-2 ${compact ? 'mb-1' : 'mb-2'}`}>
-      <span className={compact ? 'text-sm' : 'text-lg'}>{icon}</span>
-      <div className={`flex-1 bg-gray-200 rounded-full overflow-hidden ${compact ? 'h-3' : 'h-4'}`}>
-        <div
-          className="h-full transition-all duration-500 rounded-full"
-          style={{
-            width: `${value}%`,
-            backgroundColor: value < 30 ? '#EF4444' : color
-          }}
-        />
-      </div>
-      <span className={`${compact ? 'text-[10px] w-7' : 'text-xs w-8'}`}>{value}%</span>
-    </div>
-  );
-
   // Collar colors
   const collarColors = ['#FF6B6B', '#4ECDC4', '#FFE66D', '#95E1D3', '#DDA0DD'];
 
@@ -487,22 +532,26 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
     // Stimmung steuert die Bewegung: hüpfen, mampfen oder ruhig wippen
     const moodAnim = isSleeping
       ? ''
-      : mood === 'happy' || mood === 'playing'
-        ? 'pet-hop'
-        : mood === 'eating' || mood === 'drinking'
-          ? 'pet-nom'
-          : 'pet-bob';
+      : talking
+        ? 'pet-nom'
+        : mood === 'happy' || mood === 'playing'
+          ? 'pet-hop'
+          : mood === 'eating' || mood === 'drinking'
+            ? 'pet-nom'
+            : 'pet-bob';
+    // Tom-Look: Tier deutlich größer, es IST der Star des Screens
     const sizeClass = mobileDisplay
-      ? isPuppy ? 'w-20 h-20' : 'w-28 h-28'
-      : isPuppy ? 'w-36 h-36' : 'w-48 h-48';
+      ? isPuppy ? 'w-32 h-32' : 'w-40 h-40'
+      : isPuppy ? 'w-52 h-52' : 'w-64 h-64';
     return (
       <div className={`relative flex flex-col items-center ${moodAnim}`}>
-        {/* Pet Image */}
-        <div className="relative">
+        {/* Pet Image — antippen = streicheln */}
+        <div className="relative" onPointerDown={petThePet} style={{ cursor: 'pointer', touchAction: 'manipulation' }}>
           <img
             src={getPetImage()}
             alt={petName}
-            className={`object-contain transition-all duration-300 ${sizeClass}`}
+            className={`object-contain transition-all duration-300 select-none ${sizeClass} ${petting ? 'scale-110' : ''}`}
+            draggable={false}
             style={{
               filter: isSleeping ? 'brightness(0.7)' : 'none'
             }}
@@ -983,6 +1032,7 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
           <button onClick={() => setScreen('collar')} className={`bg-white/50 rounded-full ${mobileDisplay ? 'text-lg p-1.5' : 'text-2xl p-2'}`}>👔</button>
           <button onClick={() => setScreen('shop')} className={`bg-white/50 rounded-full ${mobileDisplay ? 'text-lg p-1.5' : 'text-2xl p-2'}`}>🛒</button>
           <button onClick={() => setShowAlbum(true)} title="Sammelalbum" className={`bg-white/50 rounded-full ${mobileDisplay ? 'text-lg p-1.5' : 'text-2xl p-2'}`}>📖</button>
+          <button onClick={toggleMute} title="Ton an/aus" className={`bg-white/50 rounded-full ${mobileDisplay ? 'text-lg p-1.5' : 'text-2xl p-2'}`}>{muted ? '🔇' : '🔊'}</button>
           <button
             onClick={toggleMobileDisplay}
             className={`rounded-full transition-colors ${mobileDisplay ? 'bg-green-400 text-base p-1.5' : 'bg-white/50 text-xl p-2'
@@ -994,16 +1044,29 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
         </div>
       </div>
 
-      {/* Status bars */}
-      <div className={`bg-white/80 rounded-2xl shadow-lg ${mobileDisplay ? 'p-2 mb-2' : 'p-4 mb-4'}`}>
-        <StatusBar label="Hunger" value={hunger} color="#22C55E" icon="🍖" compact={mobileDisplay} />
-        <StatusBar label="Schlaf" value={sleep} color="#3B82F6" icon="😴" compact={mobileDisplay} />
-        <StatusBar label="Spaß" value={fun} color="#F59E0B" icon="⭐" compact={mobileDisplay} />
-        <StatusBar label="Toilette" value={toilet} color="#8B5CF6" icon="🚽" compact={mobileDisplay} />
+      {/* Bedürfnisse als kompakte Chips — das Tier ist der Star, nicht die Balken */}
+      <div className={`bg-white/80 rounded-2xl shadow-lg ${mobileDisplay ? 'p-2 mb-2' : 'p-3 mb-3'}`}>
+        <div className="grid grid-cols-4 gap-1.5">
+          {[
+            { icon: '🍖', value: hunger, color: '#22C55E' },
+            { icon: '😴', value: sleep, color: '#3B82F6' },
+            { icon: '⭐', value: fun, color: '#F59E0B' },
+            { icon: '🚽', value: toilet, color: '#8B5CF6' },
+          ].map((n) => (
+            <div key={n.icon} className="flex flex-col items-center gap-0.5">
+              <span className={mobileDisplay ? 'text-base' : 'text-xl'}>{n.icon}</span>
+              <div className={`w-full bg-gray-200 rounded-full overflow-hidden ${mobileDisplay ? 'h-1.5' : 'h-2'}`}>
+                <div
+                  className="h-full transition-all duration-500 rounded-full"
+                  style={{ width: `${n.value}%`, backgroundColor: n.value < 30 ? '#EF4444' : n.color }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
         {/* XP bis zum nächsten Level */}
-        <div className={`flex items-center gap-2 ${mobileDisplay ? 'mt-1' : 'mt-2'}`}>
-          <span className={mobileDisplay ? 'text-sm' : 'text-lg'}>⭐</span>
-          <div className={`flex-1 bg-gray-200 rounded-full overflow-hidden ${mobileDisplay ? 'h-3' : 'h-4'}`}>
+        <div className={`flex items-center gap-2 ${mobileDisplay ? 'mt-1.5' : 'mt-2'}`}>
+          <div className={`flex-1 bg-gray-200 rounded-full overflow-hidden ${mobileDisplay ? 'h-1.5' : 'h-2'}`}>
             <div
               className="h-full bg-violet-500 transition-all duration-500 rounded-full"
               style={{
@@ -1011,8 +1074,8 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
               }}
             />
           </div>
-          <span className={`${mobileDisplay ? 'text-[10px]' : 'text-xs'} whitespace-nowrap`}>
-            Level {level}
+          <span className={`${mobileDisplay ? 'text-[10px]' : 'text-xs'} whitespace-nowrap text-violet-600 font-bold`}>
+            Lv {level}
           </span>
         </div>
       </div>
@@ -1080,7 +1143,7 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
           backgroundImage: `url(${(ROOM_BGS[roomTheme] || ROOM_BGS.default)[currentRoom]})`,
           backgroundSize: 'cover',
           backgroundPosition: 'center',
-          minHeight: mobileDisplay ? '160px' : '250px'
+          minHeight: mobileDisplay ? '230px' : '340px'
         }}
       >
         {/* Sleeping overlay */}
@@ -1160,6 +1223,21 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
             🎨
           </button>
         )}
+
+        {/* Nachsprechen: Mikro gedrückt halten */}
+        <button
+          onPointerDown={micDown}
+          onPointerUp={micUp}
+          onPointerLeave={() => recRef.current && micUp()}
+          className={`absolute bottom-2 left-2 rounded-full shadow-lg select-none
+                      ${recording ? 'bg-red-500 scale-125 animate-pulse' : talking ? 'bg-violet-400' : 'bg-white/70'}
+                      ${mobileDisplay ? 'text-lg p-2' : 'text-2xl p-3'}`}
+          style={{ touchAction: 'none' }}
+          title="Gedrückt halten und sprechen — der Hund plappert nach!"
+        >
+          {talking ? '🗣️' : '🎤'}
+        </button>
+
 
         {/* Needs cleaning indicator */}
         {needsClean && (
