@@ -281,16 +281,20 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
     return () => clearTimeout(t);
   }, [levelUp]);
 
-  // Decrease needs over time
+  // Decrease needs over time — bewusst gemächlich (Kinder-Feedback 18.07.:
+  // vorher war alles in 3 Minuten leer). Jetzt ~50 Min von voll bis leer,
+  // Schlaf noch langsamer.
+  const tickRef = useRef(0);
   useEffect(() => {
     if (screen !== 'main' || isSleeping) return;
 
     const interval = setInterval(() => {
-      setHunger(h => Math.max(0, h - 2));
-      setSleep(s => Math.max(0, s - 1));
-      setFun(f => Math.max(0, f - 2));
-      setToilet(t => Math.max(0, t - 3));
-    }, 3000);
+      tickRef.current += 1;
+      setHunger(h => Math.max(0, h - 1));
+      setFun(f => Math.max(0, f - 1));
+      setToilet(t => Math.max(0, t - 1));
+      if (tickRef.current % 2 === 0) setSleep(s => Math.max(0, s - 1));
+    }, 30000);
 
     return () => clearInterval(interval);
   }, [screen, isSleeping]);
@@ -406,30 +410,38 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
     setShowGameSelect(true);
   };
 
+  const gameStartRef = useRef(null);
+
   const handleGameSelect = (gameId, difficulty = null) => {
     setShowGameSelect(false);
     setCurrentRoom('playroom');
     setMood('playing');
     setCurrentGame(gameId);
     setGameDifficulty(difficulty);
+    gameStartRef.current = Date.now();
   };
 
   const handleGameEnd = (earnedCoins, countsAsGame = true) => {
     setCurrentGame(null);
     setGameDifficulty(null);
     setFun(f => Math.min(100, f + 30));
-    setCoins(c => c + earnedCoins);
     setMood('happy');
     setCurrentRoom('main');
-    if (earnedCoins > 0) showFloaty(`+${earnedCoins} 💰`);
-    // Ohne Münzgewinn (abgebrochen/verloren) nur Trost-XP — sonst wäre
-    // Spiel-auf-zu-auf-zu eine XP-Maschine
-    addXp(earnedCoins > 0 ? XP.gameBase + XP.perCoin * earnedCoins : 3);
+    // Spielzeit-Münzen (Kinder-Feedback 18.07.): Endlosspiele und Abbrüche
+    // geben trotzdem was — 1 Münze je angefangene Minute, gedeckelt auf 5.
+    // Deckel + Mindest-Spielzeit, damit Auf-zu-auf-zu keine Münzmaschine wird.
+    const playedMs = gameStartRef.current ? Date.now() - gameStartRef.current : 0;
+    gameStartRef.current = null;
+    const timeCoins = countsAsGame && playedMs >= 20000
+      ? Math.min(5, Math.ceil(playedMs / 60000))
+      : 0;
+    const total = earnedCoins + timeCoins;
+    setCoins(c => c + total);
+    if (total > 0) showFloaty(`+${total} 💰`);
+    addXp(total > 0 ? XP.gameBase + XP.perCoin * total : 3);
     if (countsAsGame) trackEvent('game');
-    if (earnedCoins > 0) {
-      trackEvent('win');
-      trackEvent('earn', earnedCoins);
-    }
+    if (earnedCoins > 0) trackEvent('win');
+    if (total > 0) trackEvent('earn', total);
   };
 
   const handleGameSelectClose = () => {
@@ -942,9 +954,18 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
         />
       )}
 
-      {/* Zauber-Maler (Kreativ-Studio, keine Münzen, zählt nicht als Minispiel) */}
+      {/* Zauber-Maler: zählt nicht als Minispiel, aber jedes gemalte Bild gibt Münzen+XP */}
       {currentGame === 'magicpainter' && (
-        <MagicPainter onClose={() => handleGameEnd(0, false)} onDrawing={() => trackEvent('draw')} />
+        <MagicPainter
+          onClose={() => handleGameEnd(0, false)}
+          onDrawing={() => {
+            trackEvent('draw');
+            setCoins((c) => c + 5);
+            trackEvent('earn', 5);
+            showFloaty('+5 💰');
+            addXp(XP.gameBase);
+          }}
+        />
       )}
 
       {/* Header */}
