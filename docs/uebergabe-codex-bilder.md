@@ -91,3 +91,28 @@ Bekannte Rest-Schwächen (= sinnvolle nächste Arbeitspakete):
 - Commits auf main, push = Deploy auf beide Domains. Nach Push live verifizieren.
 - Alte Originale der ersetzten Frames liegen als Backup im (flüchtigen) Scratchpad
   `old_frames/` der Claude-Session — im Zweifel: git history hat alles.
+
+## Codex-Fortsetzung 19.07.2026: Ergebnis der Paar-Experimente
+
+- `regen_pairs.py` testet die Side-by-side-Idee nicht-destruktiv. Der Pilot mit
+  `meerkat_drink` war **nicht brauchbar**: Das Modell erzeugte trotz identischem
+  Storyboard zwei deutlich verschiedene Körperhaltungen; außerdem verlor rembg
+  die weiße Tasse auf weißem Hintergrund. Diesen Pfad nicht für Serienproduktion
+  verwenden, nur als dokumentierten Versuch behalten.
+- Der robuste Pfad ist `regen_sequences.py`: Frame A wird aus genau einem guten
+  Zieltier-Anker erzeugt; Frame B verwendet das rohe A-Bild als einzige Referenz
+  und ändert nur die Augenlider. Eine hellblaue Tasse vermeidet die Weiß-auf-Weiß-
+  Freistellfalle. Ergebnis: identisches Tier, Requisit, Maßstab und Bodenlinie;
+  ruhige 500-ms-Blinzelanimation.
+- Mit diesem Pfad ersetzt: `meerkat`, `tomwelpe`, `catwelpe`, `otterwelpe` und
+  `wolfwelpe`, jeweils `drink_A/B`.
+- `regen_blinks.py` leitet bei unruhigen Futterpaaren ein neues B ausschließlich
+  aus dem akzeptierten A ab. Ersetzt: `tomwelpe_eat_B`, `catwelpe_eat_B`,
+  `otterwelpe_eat_B`.
+- `regen_single_candidates.py` erzeugt den korrigierten grauen
+  `wolfwelpe_sleep_A` ausschließlich aus `wolfwelpe_idle_A`.
+- `pair_frames.py` kapselt Prompt- und Split-Helfer; `test_pair_frames.py` prüft
+  Split-Geometrie und die Identitäts-/Minimalbewegungs-Regeln.
+- Alle Generatoren schreiben neue Versuche zuerst nach `tools/frames/candidates/`.
+  Erst nach Sichtung werden akzeptierte Dateien nach `src/assets/` kopiert,
+  normalisiert und über alle zehn Contact-Sheets erneut abgenommen.

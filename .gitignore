@@ -24,3 +24,8 @@ npm-debug.log*
 
 .vercel
 .env*.local
+
+# Frame-QA-Artefakte und verworfene Generierungsvarianten
+tools/frames/sheet_*.png
+tools/frames/candidates/
+tools/frames/__pycache__/
