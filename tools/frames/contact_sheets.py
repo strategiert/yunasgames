@@ -1,17 +1,18 @@
-# Contact-Sheets: pro Tier-Prefix ein 5x3-Grid mit Frame-Labels
-import os
+# Contact-Sheets: pro Tier-Prefix ein 4x9-Grid mit Frame-Labels
+from pathlib import Path
 from PIL import Image, ImageDraw
 
-ASSETS = r"C:\Users\karent\Documents\Software\personal\yuna-pet-game\src\assets"
-OUT = os.path.dirname(os.path.abspath(__file__))
+ROOT = Path(__file__).resolve().parents[2]
+ASSETS = ROOT / "src" / "assets"
+OUT = Path(__file__).resolve().parent
 
-POSES = ["idle_A","idle_B","happy_A","happy_B","sad_A","sad_B","eat_A","eat_B",
-         "drink_A","drink_B","toilet_A","toilet_B","sleep_A","play_A","clean_A"]
+MOODS = ["idle", "happy", "sad", "eat", "drink", "toilet", "sleep", "play", "clean"]
+POSES = [f"{mood}_{frame}" for mood in MOODS for frame in "ABCD"]
 PREFIXES = ["tom","tomwelpe","cat","catwelpe","meerkat","meerkatwelpe",
             "otter","otterwelpe","wolf","wolfwelpe"]
 
 CELL = 220
-COLS, ROWS = 5, 3
+COLS, ROWS = 4, 9
 
 for prefix in PREFIXES:
     sheet = Image.new("RGB", (COLS*CELL, ROWS*CELL+24), "white")
@@ -19,8 +20,8 @@ for prefix in PREFIXES:
     for i, pose in enumerate(POSES):
         col, row = i % COLS, i // COLS
         x, y = col*CELL, row*CELL
-        p = os.path.join(ASSETS, f"{prefix}_{pose}.png")
-        if os.path.exists(p):
+        p = ASSETS / f"{prefix}_{pose}.png"
+        if p.exists():
             im = Image.open(p).convert("RGBA")
             im.thumbnail((CELL-10, CELL-26))
             bg = Image.new("RGBA", (CELL, CELL), "white")
@@ -31,6 +32,6 @@ for prefix in PREFIXES:
         draw.text((x+6, y+CELL-20), pose, fill="black")
         draw.rectangle([x, y, x+CELL-1, y+CELL-1], outline="#ccc")
     draw.text((4, ROWS*CELL+4), prefix, fill="black")
-    out = os.path.join(OUT, f"sheet_{prefix}.png")
+    out = OUT / f"sheet_{prefix}.png"
     sheet.save(out)
     print("OK", out)

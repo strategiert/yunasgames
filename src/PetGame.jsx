@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { frameForMood } from './petAnimation.js';
 import MiniGame from './MiniGame';
 import TicTacToe from './TicTacToe';
 import ShapeFall from './ShapeFall';
@@ -27,8 +28,8 @@ import { questsForDate, freshQuestState, dateKey, yesterdayKey } from './lib/que
 import { sfx, isMuted, setMuted } from './lib/sfx';
 import { startRecording, playAsDog } from './lib/parrot';
 
-// Tier-Frames im 3D-Look (19.07.2026): pro Tierart 15 Posen × 2 Altersstufen,
-// per Glob gebündelt statt 150 Einzelimporte. Alte dog_/welpe_-Assets bleiben
+// Tier-Frames im 3D-Look (19.07.2026): pro Tierart 9 Stimmungen × 4 Frames ×
+// 2 Altersstufen, per Glob gebündelt statt 360 Einzelimporte. Alte dog_/welpe_-Assets bleiben
 // im Repo als Quellposen, landen aber nicht im Bundle.
 const FRAME_MODULES = import.meta.glob(
   './assets/{tom,tomwelpe,cat,catwelpe,meerkat,meerkatwelpe,otter,otterwelpe,wolf,wolfwelpe}_*.png',
@@ -45,18 +46,6 @@ export const PET_TYPES = [
 ];
 const petTypeDef = (id) => PET_TYPES.find((p) => p.id === id) || PET_TYPES[0];
 
-// mood → [Frame A, Frame B]
-const POSE_FRAMES = {
-  idle: ['idle_A', 'idle_B'],
-  happy: ['happy_A', 'happy_B'],
-  sad: ['sad_A', 'sad_B'],
-  sleeping: ['sleep_A', 'sleep_A'],
-  eating: ['eat_A', 'eat_B'],
-  drinking: ['drink_A', 'drink_B'],
-  playing: ['play_A', 'happy_A'],
-  toilet: ['toilet_A', 'toilet_B'],
-  clean: ['clean_A', 'clean_A'],
-};
 import mainroomBg from './assets/mainroom_default.png';
 import bathroomBg from './assets/bathroom_default.png';
 import playroomBg from './assets/playroom_default.png';
@@ -116,7 +105,7 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
   const [currentGame, setCurrentGame] = useState(null); // 'candy', 'tictactoe'
   const [gameDifficulty, setGameDifficulty] = useState(null);
 
-  // Animation tick (Frame-Wechsel; idle blinzelt nur kurz statt 50/50-Flip)
+  // Animation tick (vier Phasen; idle blinzelt nur kurz statt dauerhaft zu flippen)
   const [animTick, setAnimTick] = useState(0);
 
   // Deko: gekaufte Items + Slot-Belegung. Alt-Möbel werden beim ersten Laden übernommen.
@@ -323,7 +312,7 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
   useEffect(() => {
     const animInterval = setInterval(() => {
       setAnimTick(t => t + 1);
-    }, 500);
+    }, 150);
     return () => clearInterval(animInterval);
   }, []);
 
@@ -373,11 +362,7 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
   const petDef = petTypeDef(petType);
   const getPetImage = () => {
     const prefix = petDef.prefix + (isPuppy ? 'welpe' : '');
-    const [a, b] = POSE_FRAMES[mood] || POSE_FRAMES.idle;
-    // idle: B ist "Augen zu" — nur als kurzes Blinzeln alle ~3,5s zeigen.
-    // Andere Posen wechseln im normalen 500ms-Takt.
-    const useB = mood === 'idle' ? animTick % 7 === 6 : animTick % 2 === 1;
-    return frame(prefix, useB ? b : a) || frame(prefix, 'idle_A');
+    return frame(prefix, frameForMood(mood, animTick)) || frame(prefix, 'idle_A');
   };
 
   // Action handlers

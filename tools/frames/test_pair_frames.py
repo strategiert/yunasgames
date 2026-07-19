@@ -80,5 +80,27 @@ class SplitStoryboardTests(unittest.TestCase):
         self.assertIn("Keep both eyes fully closed with no iris visible.", prompt)
 
 
+class FourFrameAssetTests(unittest.TestCase):
+    def test_every_pet_mood_has_four_distinct_600px_frames(self):
+        assets = Path(__file__).resolve().parents[2] / "src" / "assets"
+        prefixes = (
+            "tom", "tomwelpe", "cat", "catwelpe", "meerkat",
+            "meerkatwelpe", "otter", "otterwelpe", "wolf", "wolfwelpe",
+        )
+        moods = ("idle", "happy", "sad", "eat", "drink", "toilet", "sleep", "play", "clean")
+
+        for prefix in prefixes:
+            for mood in moods:
+                images = []
+                for suffix in "ABCD":
+                    path = assets / f"{prefix}_{mood}_{suffix}.png"
+                    self.assertTrue(path.exists(), path.name)
+                    with Image.open(path) as opened:
+                        self.assertEqual((600, 600), opened.size, path.name)
+                        self.assertIn("transparency", opened.info, path.name)
+                        images.append(opened.convert("RGBA").tobytes())
+                self.assertEqual(4, len(set(images)), f"{prefix}_{mood}")
+
+
 if __name__ == "__main__":
     unittest.main()

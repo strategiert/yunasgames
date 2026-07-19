@@ -13,23 +13,23 @@ Auftrag von Klaus: Die Bild-Seite (Frame-Qualität, Stil-Konsistenz, Animations-
 - 5 wählbare Tiere: Hund/Katze/Erdmännchen/Otter/Wolf (`PET_TYPES` in `src/PetGame.jsx`).
 - Pro Tier 2 Wachstumsstufen: Welpe (`<tier>welpe_*`, Level 1–3) und ausgewachsen
   (`<tier>_*`, ab Level 4). Hund heißt historisch `tom`/`tomwelpe`.
-- Pro Stufe 15 Posen-Frames: `idle_A/B, happy_A/B, sad_A/B, eat_A/B, drink_A/B,
-  toilet_A/B, sleep_A, play_A, clean_A` → 150 PNGs in `src/assets/`, 600×600,
+- Pro Stufe 36 Posen-Frames: `idle, happy, sad, eat, drink, toilet, sleep, play,
+  clean`, jeweils als `A/B/C/D` → 360 PNGs in `src/assets/`, 600×600,
   transparenter Hintergrund, 256-Farben-quantisiert.
 
 ## Wie die Animation funktioniert (wichtig für Konsistenz-Anforderungen)
 
-`src/PetGame.jsx` → `getPetImage()`: Die Stimmung wählt ein A/B-Paar, ein
-500-ms-Tick flippt A↔B (idle blinzelt nur jeden 7. Tick, `animTick % 7 === 6`).
-Konsequenz: **A und B einer Pose müssen dasselbe Tier in fast derselben Pose
-zeigen** (gleiche Größe, gleiche Bodenlinie, gleicher Stil) — sonst „springt"
-das Tier sichtbar. Genau das war der Kinder-Bugreport vom 19.07.
+`src/PetGame.jsx` → `getPetImage()`: Die Stimmung wählt eine A/B/C/D-Sequenz.
+Ein 150-ms-Tick läuft bei aktiven Stimmungen vor und zurück
+(`A→B→C→D→C→B`). Idle hält A für 19 Ticks und spielt danach denselben kurzen
+Blinzelbogen. Konsequenz: **Alle vier Frames müssen exakt dasselbe Tier mit
+gleichem Maßstab und gleicher Bodenlinie zeigen** — sonst „springt" das Tier.
 
 ## Werkzeuge (alle in `tools/frames/`, Python + PIL, kein npm nötig)
 
 | Skript | Zweck |
 |---|---|
-| `contact_sheets.py` | Baut pro Tier-Stufe ein 5×3-Übersichtsbild aller 15 Frames. **Pflicht-QA: nach JEDER Generierung Sheets bauen und jedes Bild ansehen.** |
+| `contact_sheets.py` | Baut pro Tier-Stufe ein 4×9-Übersichtsbild aller 36 Frames. **Pflicht-QA: nach JEDER Änderung Sheets bauen und jedes Bild ansehen.** |
 | `normalize_frames.py` | Alpha-BBox-Crop, A/B-Paare auf gleichen Maßstab, 600×600 unten-mittig, Quantisierung auf 256 Farben. **Nach jeder Neugenerierung über alles laufen lassen** (idempotent). Skaliert auch HOCH — nicht entfernen, sonst kommen Größensprünge zurück. |
 | `regen_frames.py` | Batch-Neugenerierung mit Pose-Quellbild (tom-Frame) + Stil-Anker (guter Frame des Zieltiers). Defekt-Liste im `REGEN`-Dict. |
 | `regen_retry.py` | Retry-Strategie für hartnäckige Fälle: NUR ein Bild des Zieltiers als Referenz, Pose ausschließlich als Textanweisung. |
@@ -39,14 +39,14 @@ das Tier sichtbar. Genau das war der Kinder-Bugreport vom 19.07.
 
 Skripte enthalten absolute Pfade auf den Assets-Ordner — laufen von überall.
 Vor Commit von Frame-Änderungen: `npm run build` (Precache-Größe im Log prüfen,
-aktuell ~13 MB, `maximumFileSizeToCacheInBytes` ist 4 MB pro Datei).
+aktuell ~20 MB, `maximumFileSizeToCacheInBytes` ist 4 MB pro Datei).
 
 ## API-Zugang
 
-fal-Key: `FAL_API_KEY` in `C:\Users\karent\.env` (von Klaus für dieses Projekt
-genehmigt). Modelle: `fal-ai/nano-banana/edit` (Bild-Edit mit Referenzen,
-~4 Cent/Bild) + `fal-ai/imageutils/rembg` (Freisteller). OpenAI-Key ist am
-Billing-Limit — nicht verwenden.
+Historisch existiert ein fal-Zugang für die Generator-Skripte. **Nicht automatisch
+verwenden:** Jeder Lauf verursacht externe Kosten und braucht vorher Klaus'
+ausdrückliche Freigabe. Die konsistenten Vierer-Sequenzen vom 19.07. wurden ohne
+die fal-Pipeline erstellt.
 
 ## Fallen, die uns Stunden gekostet haben
 
@@ -69,21 +69,14 @@ Billing-Limit — nicht verwenden.
    `cmp` gegen lokale Dateien. Minifier-Falle: Zahlen wie 30000 werden zu `3e4` —
    nur String-Marker greppen.
 
-## Aktueller Qualitätsstand (nach 84d93d1)
+## Aktueller Qualitätsstand (Codex-Fortsetzung 19.07.2026)
 
-Alle 150 Frames zeigen das richtige Tier im 3D-Look, Größen normalisiert.
-Bekannte Rest-Schwächen (= sinnvolle nächste Arbeitspakete):
-
-- **drink_B mehrerer Tiere** (meerkat, tomwelpe, otterwelpe, wolfwelpe, catwelpe):
-  gebückt-kompakte Trink-Pose, flippt gegen aufrechtes drink_A — als „Animation"
-  lesbar, aber der größte verbliebene Konsistenzbruch.
-- **eat_A vs eat_B** teils unterschiedliche Körperhaltung (aufrecht vs. vierbeinig).
-- **meerkat drink_B**: heraushängende Zunge, wirkt leicht deplatziert.
-- **wolfwelpe sleep_A**: Kopf wirkt eher Husky-braun-weiß statt grau.
-- **A/B-Paare sind nachträglich zusammengesetzt**, nicht als echtes Paar generiert.
-  Ideal wäre pro Pose EIN Generierungsaufruf, der A und B als Mini-Sequenz erzeugt
-  (z. B. „two frames of the same animation, side by side" und dann splitten) —
-  nie ausprobiert, könnte die Flip-Ruhe deutlich verbessern.
+Alle zehn Tier-/Altersstufen wurden als jeweils ein konsistenter Charakter neu
+aufgebaut. Für jede der neun Stimmungen liegen vier geprüfte Frames vor. Die
+sechs bisherigen A/B-Aktionen haben echte Zwischenstufen für die Augenlider;
+sleep, play und clean erhalten ruhige, minimale Bewegungsstufen. Insgesamt sind
+es 360 transparente, normalisierte 600×600-PNGs. Automatische Tests verhindern
+fehlende, doppelte oder falsch dimensionierte Viererfolgen.
 
 ## Spielregeln
 
