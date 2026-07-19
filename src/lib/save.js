@@ -4,7 +4,8 @@ const ACTIVE_KEY = 'yunaActiveProfile';
 const SAVE_PREFIX = 'yunaPetSave-v2:';
 const LEGACY_KEY = 'yunaPetSave-v1';
 
-export const MAX_PROFILES = 4;
+// Kinder wollen mehrere Tiere gleichzeitig — jedes Profil ist ein eigenes Tier
+export const MAX_PROFILES = 12;
 
 const readJson = (key) => {
   try {

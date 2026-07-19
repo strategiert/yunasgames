@@ -27,7 +27,9 @@ const ProfileSelect = ({ profiles, onSelect, onCreate, onDelete, petImageFor }) 
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-sky-200 to-green-200 flex flex-col items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-b from-sky-200 to-green-200 flex flex-col items-center p-4 overflow-y-auto">
+      {/* my-auto statt justify-center: zentriert, schneidet aber bei vielen Profilen oben nichts ab */}
+      <div className="my-auto flex flex-col items-center w-full">
       <img src={dogIdleA} alt="Hund" className="w-24 h-24 object-contain mb-2 animate-bounce" />
       <h1 className="text-3xl font-bold text-pink-600 mb-1">Wer spielt?</h1>
       <p className="text-gray-600 mb-6">Yunas Haustier-Spiel</p>
@@ -100,6 +102,7 @@ const ProfileSelect = ({ profiles, onSelect, onCreate, onDelete, petImageFor }) 
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 };
