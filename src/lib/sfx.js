@@ -1,5 +1,15 @@
-// Prozedurale Sound-Effekte über WebAudio — keine Audio-Dateien nötig,
-// funktioniert offline und hält die PWA klein.
+// UI-Sound-Effekte prozedural über WebAudio; die Tierstimmen sind echte
+// Aufnahmen (mp3, via ElevenLabs SFX generiert) — Kinder-Feedback: Tiere
+// sollen nach Tier klingen, nicht nach Ping.
+import dogVoice from '../assets/sounds/dog.mp3';
+import catVoice from '../assets/sounds/cat.mp3';
+import meerkatVoice from '../assets/sounds/meerkat.mp3';
+import otterVoice from '../assets/sounds/otter.mp3';
+import wolfVoice from '../assets/sounds/wolf.mp3';
+
+const VOICE_FILES = { dog: dogVoice, cat: catVoice, meerkat: meerkatVoice, otter: otterVoice, wolf: wolfVoice };
+let voiceEl = null;
+
 let ctx = null;
 const MUTE_KEY = 'yunaSoundMuted';
 
@@ -93,8 +103,21 @@ export const sfx = {
     if (isMuted()) return;
     [1200, 1500, 1100].forEach((f, i) => tone(f, i * 0.08, 0.06, { type: 'square', gain: 0.05 }));
   },
-  // Tierstimme passend zur gewählten Art
+  // Tierstimme passend zur gewählten Art — echte Aufnahme, prozeduraler Fallback
   voice(petType) {
-    ({ dog: this.bark, cat: this.meow, wolf: this.howl, meerkat: this.chirp, otter: this.chirp }[petType] || this.bark).call(this);
+    if (isMuted()) return;
+    const fallback = () =>
+      ({ dog: this.bark, cat: this.meow, wolf: this.howl, meerkat: this.chirp, otter: this.chirp }[petType] || this.bark).call(this);
+    const url = VOICE_FILES[petType] || VOICE_FILES.dog;
+    try {
+      if (!voiceEl) voiceEl = new Audio();
+      voiceEl.pause();
+      voiceEl.src = url;
+      voiceEl.volume = 0.8;
+      const p = voiceEl.play();
+      if (p && p.catch) p.catch(fallback);
+    } catch {
+      fallback();
+    }
   },
 };

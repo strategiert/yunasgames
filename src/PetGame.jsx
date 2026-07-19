@@ -172,7 +172,7 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
     setPetting(true);
     setMood('happy');
     showFloaty(['💕', '💖', '✨', '🐾'][Math.floor(Math.random() * 4)]);
-    Math.random() < 0.4 ? sfx.voice(petType) : sfx.giggle();
+    sfx.voice(petType); // Kinder-Feedback: Berühren = immer echtes Tiergeräusch
     setTimeout(() => {
       setPetting(false);
       setMood('idle');
@@ -837,6 +837,10 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
       {slotPicker && (() => {
         const slotDef = Object.values(ROOM_SLOTS).flat().find((s) => s.id === slotPicker);
         const fitting = ITEMS.filter((i) => ownedItems.includes(i.id) && i.slots.includes(slotPicker));
+        // Hängt hier das Zauber-Maler-Poster? Dann verdeckt es den Slot — jede Wahl
+        // (Leer oder Deko) nimmt es ab, damit die Auswahl sichtbar wird.
+        const posterHere = slotPicker === 'wandRechts' && !!posterUrl;
+        const removePoster = () => setPosters((prev) => ({ ...prev, wandRechts: undefined }));
         return (
           <div
             className="fixed inset-0 bg-black/70 z-[70] flex items-center justify-center p-4"
@@ -855,6 +859,7 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
               <div className="grid grid-cols-3 gap-2">
                 <button
                   onClick={() => {
+                    if (posterHere) removePoster();
                     setDecor((prev) => {
                       const next = { ...prev };
                       delete next[slotPicker];
@@ -867,10 +872,23 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
                   <div className="text-2xl">🚫</div>
                   <div className="text-xs">Leer</div>
                 </button>
+                {posterHere && (
+                  <button
+                    onClick={() => {
+                      removePoster();
+                      setSlotPicker(null);
+                    }}
+                    className="rounded-xl bg-violet-100 p-2 text-center ring-2 ring-violet-300"
+                  >
+                    <div className="text-2xl">🖼️</div>
+                    <div className="text-xs">Poster abhängen</div>
+                  </button>
+                )}
                 {fitting.map((item) => (
                   <button
                     key={item.id}
                     onClick={() => {
+                      if (posterHere) removePoster();
                       // Item kann nur an EINEM Platz stehen — anderswo wegräumen
                       setDecor((prev) => {
                         const next = { ...prev };
@@ -1179,7 +1197,10 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
         {/* Deko in den Slots des aktuellen Raums */}
         {(ROOM_SLOTS[currentRoom] || []).map((slot) => {
           const placed = decor[slot.id] ? itemById(decor[slot.id]) : null;
-          if (slot.id === 'wandRechts' && posterUrl) return null; // Poster hat Vorrang
+          const hasPoster = slot.id === 'wandRechts' && posterUrl;
+          // Poster hat Vorrang — aber im ✏️-Modus bleibt der Slot antippbar, sonst
+          // ließe sich ein aufgehängtes Poster nie wieder ändern oder abnehmen.
+          if (hasPoster && !editRoom) return null;
           if (!editRoom && !placed) return null;
           return (
             <button
@@ -1192,7 +1213,7 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
               }`}
               title={slot.label}
             >
-              {placed ? placed.emoji : '➕'}
+              {hasPoster ? '🖼️' : placed ? placed.emoji : '➕'}
             </button>
           );
         })}

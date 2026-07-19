@@ -36,7 +36,7 @@ export default defineConfig({
         skipWaiting: true,
         clientsClaim: true,
         cleanupOutdatedCaches: true,
-        globPatterns: ['**/*.{js,css,html,png,jpeg,jpg,svg,woff2}'],
+        globPatterns: ['**/*.{js,css,html,png,jpeg,jpg,svg,woff2,mp3}'],
         // Zimmer-PNGs sind bis 1,8 MB groß — Standard-Limit (2 MB) knapp, daher angehoben
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
         navigateFallback: '/index.html',
