@@ -24,25 +24,39 @@ import { levelForXp, xpForNextLevel, xpForLevel, XP, ACCESSORIES } from './lib/p
 import { ROOM_SLOTS, ITEMS, itemById, legacyFurnitureToItems } from './lib/items';
 import { questsForDate, freshQuestState, dateKey, yesterdayKey } from './lib/quests';
 
-// Tier-Frames im Tom-Look (3D-Render, 19.07.2026); alte dog_/welpe_-Assets
-// bleiben im Repo als Quellposen für künftige Generierungen.
-import dogIdleA from './assets/tom_idle_A.png';
-import dogIdleB from './assets/tom_idle_B.png';
-import dogHappyA from './assets/tom_happy_A.png';
-import dogHappyB from './assets/tom_happy_B.png';
-import dogSadA from './assets/tom_sad_A.png';
-import dogSadB from './assets/tom_sad_B.png';
-import dogEatA from './assets/tom_eat_A.png';
-import dogEatB from './assets/tom_eat_B.png';
-import dogDrinkA from './assets/tom_drink_A.png';
-import dogDrinkB from './assets/tom_drink_B.png';
-import dogSleepA from './assets/tom_sleep_A.png';
-import dogPlayA from './assets/tom_play_A.png';
-import dogToiletA from './assets/tom_toilet_A.png';
-import dogToiletB from './assets/tom_toilet_B.png';
-import dogCleanA from './assets/tom_clean_A.png';
 import { sfx, isMuted, setMuted } from './lib/sfx';
 import { startRecording, playAsDog } from './lib/parrot';
+
+// Tier-Frames im 3D-Look (19.07.2026): pro Tierart 15 Posen × 2 Altersstufen,
+// per Glob gebündelt statt 150 Einzelimporte. Alte dog_/welpe_-Assets bleiben
+// im Repo als Quellposen, landen aber nicht im Bundle.
+const FRAME_MODULES = import.meta.glob(
+  './assets/{tom,tomwelpe,cat,catwelpe,meerkat,meerkatwelpe,otter,otterwelpe,wolf,wolfwelpe}_*.png',
+  { eager: true }
+);
+const frame = (prefix, pose) => FRAME_MODULES[`./assets/${prefix}_${pose}.png`]?.default;
+
+export const PET_TYPES = [
+  { id: 'dog', prefix: 'tom', label: 'Hund', emoji: '🐶' },
+  { id: 'cat', prefix: 'cat', label: 'Katze', emoji: '🐱' },
+  { id: 'meerkat', prefix: 'meerkat', label: 'Erdmännchen', emoji: '🐹' },
+  { id: 'otter', prefix: 'otter', label: 'Otter', emoji: '🦦' },
+  { id: 'wolf', prefix: 'wolf', label: 'Wolf', emoji: '🐺' },
+];
+const petTypeDef = (id) => PET_TYPES.find((p) => p.id === id) || PET_TYPES[0];
+
+// mood → [Frame A, Frame B]
+const POSE_FRAMES = {
+  idle: ['idle_A', 'idle_B'],
+  happy: ['happy_A', 'happy_B'],
+  sad: ['sad_A', 'sad_B'],
+  sleeping: ['sleep_A', 'sleep_A'],
+  eating: ['eat_A', 'eat_B'],
+  drinking: ['drink_A', 'drink_B'],
+  playing: ['play_A', 'happy_A'],
+  toilet: ['toilet_A', 'toilet_B'],
+  clean: ['clean_A', 'clean_A'],
+};
 import mainroomBg from './assets/mainroom_default.png';
 import bathroomBg from './assets/bathroom_default.png';
 import playroomBg from './assets/playroom_default.png';
@@ -55,22 +69,6 @@ import mainroomDschungel from './assets/mainroom_dschungel.jpeg';
 import bathroomDschungel from './assets/bathroom_dschungel.jpeg';
 import playroomDschungel from './assets/playroom_dschungel.jpeg';
 
-// Welpen-Frames (Level 1-3): gleiche Posen, kleiner Hund
-import welpeIdleA from './assets/tomwelpe_idle_A.png';
-import welpeIdleB from './assets/tomwelpe_idle_B.png';
-import welpeHappyA from './assets/tomwelpe_happy_A.png';
-import welpeHappyB from './assets/tomwelpe_happy_B.png';
-import welpeSadA from './assets/tomwelpe_sad_A.png';
-import welpeSadB from './assets/tomwelpe_sad_B.png';
-import welpeEatA from './assets/tomwelpe_eat_A.png';
-import welpeEatB from './assets/tomwelpe_eat_B.png';
-import welpeDrinkA from './assets/tomwelpe_drink_A.png';
-import welpeDrinkB from './assets/tomwelpe_drink_B.png';
-import welpeSleepA from './assets/tomwelpe_sleep_A.png';
-import welpePlayA from './assets/tomwelpe_play_A.png';
-import welpeToiletA from './assets/tomwelpe_toilet_A.png';
-import welpeToiletB from './assets/tomwelpe_toilet_B.png';
-import welpeCleanA from './assets/tomwelpe_clean_A.png';
 
 // Ab diesem Level ist der Welpe ausgewachsen
 const GROWN_UP_LEVEL = 4;
@@ -174,7 +172,7 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
     setPetting(true);
     setMood('happy');
     showFloaty(['💕', '💖', '✨', '🐾'][Math.floor(Math.random() * 4)]);
-    Math.random() < 0.4 ? sfx.bark() : sfx.giggle();
+    Math.random() < 0.4 ? sfx.voice(petType) : sfx.giggle();
     setTimeout(() => {
       setPetting(false);
       setMood('idle');
@@ -370,40 +368,13 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
     }
   }, [hunger, sleep, fun, toilet, isSleeping, needsClean]);
 
-  // Get current pet image based on mood, growth stage and animation frame
+  // Get current pet image based on pet type, mood, growth stage and animation frame
   const isPuppy = level < GROWN_UP_LEVEL;
+  const petDef = petTypeDef(petType);
   const getPetImage = () => {
-    const grown = {
-      idle: [dogIdleA, dogIdleB],
-      happy: [dogHappyA, dogHappyB],
-      sad: [dogSadA, dogSadB],
-      sleeping: [dogSleepA, dogSleepA],
-      eating: [dogEatA, dogEatB],
-      drinking: [dogDrinkA, dogDrinkB],
-      playing: [dogPlayA, dogHappyA],
-      toilet: [dogToiletA, dogToiletB],
-      clean: [dogCleanA, dogCleanA]
-    };
-    const puppy = {
-      idle: [welpeIdleA, welpeIdleB],
-      happy: [welpeHappyA, welpeHappyB],
-      sad: [welpeSadA, welpeSadB],
-      sleeping: [welpeSleepA, welpeSleepA],
-      eating: [welpeEatA, welpeEatB],
-      drinking: [welpeDrinkA, welpeDrinkB],
-      playing: [welpePlayA, welpeHappyA],
-      toilet: [welpeToiletA, welpeToiletB],
-      clean: [welpeCleanA, welpeCleanA]
-    };
-    const images = isPuppy ? puppy : grown;
-    const frames = images[mood] || images.idle;
-    return animFrame ? frames[1] : frames[0];
-  };
-
-  // Pet emoji for selection screen (still use emoji there)
-  const getPetEmoji = () => {
-    const pets = { cat: '🐱', dog: '🐶', rabbit: '🐰', panda: '🐼' };
-    return pets[petType] || '🐾';
+    const prefix = petDef.prefix + (isPuppy ? 'welpe' : '');
+    const [a, b] = POSE_FRAMES[mood] || POSE_FRAMES.idle;
+    return frame(prefix, animFrame ? b : a) || frame(prefix, 'idle_A');
   };
 
   // Action handlers
@@ -580,31 +551,27 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
 
   // CHOOSE PET SCREEN (neues Profil: Tier aussuchen + benennen)
   if (screen === 'choosePet') {
-    const pets = [
-      { type: 'dog', image: welpeHappyA, name: 'Hund' }
-    ];
-
     return (
       <div className="min-h-screen bg-gradient-to-b from-purple-200 to-pink-200 flex flex-col items-center p-4 pt-8">
         <button onClick={onSwitchProfile} className="self-start text-2xl mb-2">← Profile</button>
         <h2 className="text-2xl font-bold text-purple-700 mb-6">Wähle dein Tier!</h2>
 
-        <div className="flex gap-4 mb-8">
-          {pets.map(pet => (
+        <div className="grid grid-cols-3 gap-3 mb-8 max-w-sm">
+          {PET_TYPES.map(pet => (
             <button
-              key={pet.type}
-              onClick={() => setPetType(pet.type)}
-              className={`p-4 rounded-2xl transition-all ${petType === pet.type
+              key={pet.id}
+              onClick={() => setPetType(pet.id)}
+              className={`p-3 rounded-2xl transition-all ${petType === pet.id
                 ? 'bg-white shadow-lg scale-110 ring-4 ring-pink-400'
                 : 'bg-white/50 hover:bg-white/80'
                 }`}
             >
               <img
-                src={pet.image}
-                alt={pet.name}
-                className="w-24 h-24 object-contain mb-2"
+                src={frame(pet.prefix + 'welpe', 'happy_A')}
+                alt={pet.label}
+                className="w-20 h-20 object-contain mb-1 mx-auto"
               />
-              <div className="text-sm font-medium">{pet.name}</div>
+              <div className="text-xs font-medium">{pet.label}</div>
             </button>
           ))}
         </div>
@@ -612,7 +579,7 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
         {petType && (
           <div className="w-full max-w-xs">
             <label className="block text-purple-700 font-medium mb-2">
-              Wie soll dein Hündchen heißen?
+              Wie soll dein Tier heißen?
             </label>
             <input
               type="text"
@@ -767,7 +734,7 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
           className="fixed inset-0 bg-black/60 z-[80] flex flex-col items-center justify-center"
           onClick={() => setLevelUp(null)}
         >
-          <div className="text-6xl animate-bounce mb-2">{levelUp === GROWN_UP_LEVEL ? '🐕' : '🎉'}</div>
+          <div className="text-6xl animate-bounce mb-2">{levelUp === GROWN_UP_LEVEL ? petDef.emoji : '🎉'}</div>
           <div className="text-white text-4xl font-bold drop-shadow-lg mb-1">Level {levelUp}!</div>
           <div className="text-white/80 text-lg mb-4">
             {levelUp === GROWN_UP_LEVEL
@@ -1330,6 +1297,10 @@ const PetGame = () => {
     return (
       <ProfileSelect
         profiles={profiles}
+        petImageFor={(id) => {
+          const t = petTypeDef(loadProfile(id).petType);
+          return frame(t.prefix + 'welpe', 'happy_A');
+        }}
         onSelect={(id) => {
           setActiveProfile(id);
           setActiveId(id);

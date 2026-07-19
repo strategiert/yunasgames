@@ -79,4 +79,22 @@ export const sfx = {
     if (isMuted()) return;
     tone(90, 0, 0.5, { type: 'sawtooth', gain: 0.05, slideTo: 60 });
   },
+  meow() {
+    if (isMuted()) return;
+    tone(500, 0, 0.15, { type: 'sawtooth', gain: 0.07, slideTo: 900 });
+    tone(900, 0.15, 0.25, { type: 'sawtooth', gain: 0.07, slideTo: 450 });
+  },
+  howl() {
+    if (isMuted()) return;
+    tone(300, 0, 0.25, { type: 'sawtooth', gain: 0.07, slideTo: 520 });
+    tone(520, 0.25, 0.6, { type: 'sawtooth', gain: 0.07, slideTo: 380 });
+  },
+  chirp() {
+    if (isMuted()) return;
+    [1200, 1500, 1100].forEach((f, i) => tone(f, i * 0.08, 0.06, { type: 'square', gain: 0.05 }));
+  },
+  // Tierstimme passend zur gewählten Art
+  voice(petType) {
+    ({ dog: this.bark, cat: this.meow, wolf: this.howl, meerkat: this.chirp, otter: this.chirp }[petType] || this.bark).call(this);
+  },
 };

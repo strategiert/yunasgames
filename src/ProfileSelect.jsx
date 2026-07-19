@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { MAX_PROFILES } from './lib/save';
 import dogIdleA from './assets/tomwelpe_idle_A.png';
 
-const ProfileSelect = ({ profiles, onSelect, onCreate, onDelete }) => {
+const ProfileSelect = ({ profiles, onSelect, onCreate, onDelete, petImageFor }) => {
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(null);
@@ -39,7 +39,11 @@ const ProfileSelect = ({ profiles, onSelect, onCreate, onDelete }) => {
             onClick={() => onSelect(p.id)}
             className="bg-white rounded-2xl p-4 shadow-lg hover:scale-105 transition-transform relative"
           >
-            <div className="text-4xl mb-1">🐶</div>
+            {petImageFor?.(p.id) ? (
+              <img src={petImageFor(p.id)} alt="" className="w-14 h-14 object-contain mx-auto mb-1" />
+            ) : (
+              <div className="text-4xl mb-1">🐾</div>
+            )}
             <div className="font-bold text-gray-700 truncate">{p.name}</div>
             <span
               role="button"
