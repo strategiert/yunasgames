@@ -116,8 +116,8 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
   const [currentGame, setCurrentGame] = useState(null); // 'candy', 'tictactoe'
   const [gameDifficulty, setGameDifficulty] = useState(null);
 
-  // Animation frame toggle
-  const [animFrame, setAnimFrame] = useState(false);
+  // Animation tick (Frame-Wechsel; idle blinzelt nur kurz statt 50/50-Flip)
+  const [animTick, setAnimTick] = useState(0);
 
   // Deko: gekaufte Items + Slot-Belegung. Alt-Möbel werden beim ersten Laden übernommen.
   const [ownedItems, setOwnedItems] = useState(() =>
@@ -319,10 +319,10 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
     return () => window.removeEventListener('popstate', onPop);
   }, []);
 
-  // Animation timer - toggle between A and B frames
+  // Animation timer
   useEffect(() => {
     const animInterval = setInterval(() => {
-      setAnimFrame(f => !f);
+      setAnimTick(t => t + 1);
     }, 500);
     return () => clearInterval(animInterval);
   }, []);
@@ -374,7 +374,10 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
   const getPetImage = () => {
     const prefix = petDef.prefix + (isPuppy ? 'welpe' : '');
     const [a, b] = POSE_FRAMES[mood] || POSE_FRAMES.idle;
-    return frame(prefix, animFrame ? b : a) || frame(prefix, 'idle_A');
+    // idle: B ist "Augen zu" — nur als kurzes Blinzeln alle ~3,5s zeigen.
+    // Andere Posen wechseln im normalen 500ms-Takt.
+    const useB = mood === 'idle' ? animTick % 7 === 6 : animTick % 2 === 1;
+    return frame(prefix, useB ? b : a) || frame(prefix, 'idle_A');
   };
 
   // Action handlers
@@ -642,6 +645,29 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
               {hasBell ? '🔔 An' : '🔕 Aus'}
             </button>
           </div>
+
+          <h3 className="font-bold mb-3 mt-6">Tier wechseln:</h3>
+          <div className="grid grid-cols-5 gap-2 mb-2">
+            {PET_TYPES.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setPetType(t.id)}
+                className={`rounded-xl p-1.5 ${
+                  petType === t.id ? 'bg-pink-100 ring-2 ring-pink-400' : 'bg-gray-50'
+                }`}
+                title={t.label}
+              >
+                <img
+                  src={frame(t.prefix + 'welpe', 'happy_A')}
+                  alt={t.label}
+                  className="w-full aspect-square object-contain"
+                />
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-gray-500 mb-2">
+            Name, Münzen und Level bleiben — nur das Tier ändert sich.
+          </p>
 
           <h3 className="font-bold mb-3 mt-6">Accessoires (durch Level freigeschaltet):</h3>
           <div className="flex gap-3 justify-center flex-wrap">
