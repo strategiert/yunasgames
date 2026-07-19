@@ -3,6 +3,27 @@ from pathlib import Path
 from PIL import Image
 
 
+def build_recolor_prompt(stage: str, extra_constraint: str = "") -> str:
+    prompt = (
+        f"Perform a color-only edit of the exact 3D animated {stage} in image 1. Image 1 is the "
+        "sole visual source. Do not redesign or redraw the character; keep its exact polished 3D "
+        "animated-film fur material, silhouette and pixel geometry. "
+        "Change only the fur colors, markings and eye color: deep charcoal-black crown and top "
+        "of head around a narrow cream-white forehead blaze, charcoal-black outer ears, nape, "
+        "back, shoulders, outer forelegs, flanks and most of the tail; cream-white face mask "
+        "around both eyes and cheeks, muzzle, forehead blaze, throat, chest, belly, lower legs, "
+        "paws and tail tip. Give the existing eyes glossy icy blue irises with black pupils while "
+        "preserving their exact shape and expression. Preserve all original shading and fur "
+        "detail. Do not change the pose, body shape, proportions, face shape, expression, eyelids, "
+        "viewing direction, paws, tail position, props, camera, framing, scale, lighting or ground "
+        "line. Keep every prop complete and in the same location. Plain pure white background, "
+        "no text, no watermark, no extra animal."
+    )
+    if extra_constraint:
+        prompt += f" Frame-specific invariant: {extra_constraint}"
+    return prompt
+
+
 def build_sequence_prompts(
     species: str,
     posture: str,

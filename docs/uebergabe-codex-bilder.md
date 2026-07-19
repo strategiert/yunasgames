@@ -116,3 +116,21 @@ Bekannte Rest-Schwächen (= sinnvolle nächste Arbeitspakete):
 - Alle Generatoren schreiben neue Versuche zuerst nach `tools/frames/candidates/`.
   Erst nach Sichtung werden akzeptierte Dateien nach `src/assets/` kopiert,
   normalisiert und über alle zehn Contact-Sheets erneut abgenommen.
+
+## Wolwi-Farbstandard (19.07.2026)
+
+- Wolf und Wolfwelpe basieren farblich auf Yunas Stoffwolf „Wolwi“: tief
+  anthrazit-schwarzer Oberkopf, Außenohren, Nacken, Rücken, Schultern, Flanken
+  und der Großteil des Schwanzes; cremeweiße Stirnblässe, Gesichtsmaske,
+  Schnauze, Kehle, Brust, Bauch, untere Beine, Pfoten und Schwanzspitze;
+  glänzende eisblaue Iris mit schwarzer Pupille.
+- Die Wolwi-Fotos **nicht direkt als Bildreferenzen an nano-banana geben**. Der
+  erste Pilot kopierte sonst Stoffmaterial, Körperform und Frontalpose. Die Fotos
+  dienen nur zur menschlichen Ableitung der textlichen Farbmaske.
+- `regen_wolwi_colors.py` verwendet deshalb ausschließlich den jeweiligen
+  vorhandenen 3D-Frame als Bildquelle und ändert textlich nur Fellzeichnung und
+  Augenfarbe. Alle Ergebnisse landen zuerst in `tools/frames/candidates/wolwi/`.
+- Frames mit geschlossenen Augen oder wichtigen Requisiten brauchen zusätzliche
+  Einzelinvarianten. `wolf_idle_B` wird aus dem akzeptierten farbigen
+  `wolf_idle_A` als reines Blinzelbild abgeleitet, weil der Farbedit geschlossene
+  Lider wiederholt halb öffnete.

@@ -6,6 +6,7 @@ from PIL import Image
 
 from tools.frames.pair_frames import (
     build_pair_prompt,
+    build_recolor_prompt,
     build_sequence_prompts,
     split_storyboard,
 )
@@ -58,6 +59,25 @@ class SplitStoryboardTests(unittest.TestCase):
         self.assertIn("eyes open", prompt_a)
         self.assertIn("Change only the eyelids", prompt_b)
         self.assertIn("Do not change", prompt_b)
+
+    def test_recolor_prompt_changes_only_wolwi_markings_and_eyes(self):
+        prompt = build_recolor_prompt("wolf pup")
+        prompt_lower = prompt.lower()
+
+        self.assertIn("change only the fur colors", prompt_lower)
+        self.assertIn("charcoal-black", prompt_lower)
+        self.assertIn("cream-white", prompt_lower)
+        self.assertIn("icy blue", prompt_lower)
+        self.assertIn("do not change the pose", prompt_lower)
+        self.assertIn("props", prompt_lower)
+        self.assertNotIn("reference images", prompt_lower)
+
+    def test_recolor_prompt_includes_frame_specific_invariant(self):
+        prompt = build_recolor_prompt(
+            "wolf pup", "Keep both eyes fully closed with no iris visible."
+        )
+
+        self.assertIn("Keep both eyes fully closed with no iris visible.", prompt)
 
 
 if __name__ == "__main__":
