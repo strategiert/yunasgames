@@ -12,15 +12,16 @@ export function filterYunaPlaylists(items) {
     }));
 }
 
+// Bewusst NUR Smartphones: Musikbox darf nie Papas PC-Spotify kapern.
 export function pickDevice(devices) {
-  const list = (devices || []).filter((d) => d && !d.is_restricted);
-  return (
-    list.find((d) => d.type === 'Smartphone' && d.is_active) ||
-    list.find((d) => d.type === 'Smartphone') ||
-    list.find((d) => d.is_active) ||
-    list[0] ||
-    null
+  const list = (devices || []).filter(
+    (d) => d && !d.is_restricted && d.type === 'Smartphone'
   );
+  return list.find((d) => d.is_active) || list[0] || null;
+}
+
+export function isPhonePlayer(player) {
+  return player?.device?.type === 'Smartphone';
 }
 
 export function mapSearchResults(data) {

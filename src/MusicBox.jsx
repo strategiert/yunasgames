@@ -270,7 +270,11 @@ const MusicBox = ({ onClose }) => {
         {/* Mini-Player */}
         <div className="mt-4 bg-white/20 rounded-2xl p-3 text-white">
           <div className="text-center text-sm mb-2 min-h-[1.25rem] truncate">
-            {status?.track ? `${status.track} — ${status.artist}` : 'Gerade keine Musik'}
+            {status?.track
+              ? `${status.track} — ${status.artist}`
+              : status?.elsewhere
+                ? `Musik läuft woanders (${status.elsewhere})`
+                : 'Gerade keine Musik'}
           </div>
           <div className="flex items-center justify-center gap-3">
             <button onClick={() => changeVolume(-10)} disabled={busy}

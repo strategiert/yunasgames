@@ -1,6 +1,6 @@
 export const config = { maxDuration: 15 };
 
-import { filterYunaPlaylists, pickDevice, mapStatus, mapSearchResults } from './_spotifyLib.js';
+import { filterYunaPlaylists, pickDevice, mapStatus, mapSearchResults, isPhonePlayer } from './_spotifyLib.js';
 
 let cachedToken = null; // { token, expiresAt } — überlebt in warmer Instanz
 
@@ -80,7 +80,12 @@ export default async function handler(req, res) {
         const r = await sp('/me/player');
         if (r.status === 204) return res.json(mapStatus(null));
         if (!r.ok) return fail(res, r);
-        return res.json(mapStatus(await r.json()));
+        const player = await r.json();
+        // Läuft Musik woanders (PC, Speaker), geht das die Musikbox nichts an
+        if (!isPhonePlayer(player)) {
+          return res.json({ ...mapStatus(null), elsewhere: player?.device?.name || null });
+        }
+        return res.json(mapStatus(player));
       }
       case 'play': {
         const dr = await sp('/me/player/devices');
@@ -109,19 +114,25 @@ export default async function handler(req, res) {
         if (!r.ok) return fail(res, r);
         return res.json({ results: mapSearchResults(await r.json()) });
       }
-      case 'pause': {
-        const r = await sp('/me/player/pause', { method: 'PUT' });
-        if (!r.ok && r.status !== 204) return fail(res, r);
-        return res.json({ ok: true });
-      }
-      case 'next': {
-        const r = await sp('/me/player/next', { method: 'POST' });
-        if (!r.ok && r.status !== 204) return fail(res, r);
-        return res.json({ ok: true });
-      }
+      case 'pause':
+      case 'next':
       case 'volume': {
-        const v = Math.max(0, Math.min(100, Number(volume) || 0));
-        const r = await sp(`/me/player/volume?volume_percent=${v}`, { method: 'PUT' });
+        // Steuerung nur, wenn gerade das Handy spielt — nie Papas PC fernsteuern
+        const pr = await sp('/me/player');
+        if (pr.status === 204) return res.status(409).json({ error: 'no_device' });
+        if (!pr.ok) return fail(res, pr);
+        if (!isPhonePlayer(await pr.json())) {
+          return res.status(409).json({ error: 'no_device' });
+        }
+        let r;
+        if (action === 'pause') {
+          r = await sp('/me/player/pause', { method: 'PUT' });
+        } else if (action === 'next') {
+          r = await sp('/me/player/next', { method: 'POST' });
+        } else {
+          const v = Math.max(0, Math.min(100, Number(volume) || 0));
+          r = await sp(`/me/player/volume?volume_percent=${v}`, { method: 'PUT' });
+        }
         if (!r.ok && r.status !== 204) return fail(res, r);
         return res.json({ ok: true });
       }

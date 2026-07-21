@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { filterYunaPlaylists, pickDevice, mapStatus, mapSearchResults } from './_spotifyLib.js';
+import { filterYunaPlaylists, pickDevice, mapStatus, mapSearchResults, isPhonePlayer } from './_spotifyLib.js';
 
 test('filterYunaPlaylists nimmt nur Yuna*-Playlists, case-insensitive', () => {
   const items = [
@@ -22,17 +22,24 @@ test('filterYunaPlaylists übersteht leere/fehlende Liste', () => {
   assert.deepEqual(filterYunaPlaylists([]), []);
 });
 
-test('pickDevice bevorzugt aktives Smartphone, dann Smartphone, dann aktiv, dann erstes', () => {
+test('pickDevice nimmt NUR Smartphones — nie PC/Speaker, auch wenn aktiv', () => {
   const phoneActive = { id: 'a', type: 'Smartphone', is_active: true };
   const phone = { id: 'b', type: 'Smartphone', is_active: false };
   const pcActive = { id: 'c', type: 'Computer', is_active: true };
   const pc = { id: 'd', type: 'Computer', is_active: false };
   assert.equal(pickDevice([pc, pcActive, phone, phoneActive]).id, 'a');
   assert.equal(pickDevice([pc, pcActive, phone]).id, 'b');
-  assert.equal(pickDevice([pc, pcActive]).id, 'c');
-  assert.equal(pickDevice([pc]).id, 'd');
+  assert.equal(pickDevice([pc, pcActive]), null);
+  assert.equal(pickDevice([pc]), null);
   assert.equal(pickDevice([]), null);
   assert.equal(pickDevice(undefined), null);
+});
+
+test('isPhonePlayer erkennt nur Smartphone-Player', () => {
+  assert.equal(isPhonePlayer({ device: { type: 'Smartphone' } }), true);
+  assert.equal(isPhonePlayer({ device: { type: 'Computer' } }), false);
+  assert.equal(isPhonePlayer(null), false);
+  assert.equal(isPhonePlayer({}), false);
 });
 
 test('pickDevice ignoriert restricted Devices', () => {
