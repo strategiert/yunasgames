@@ -14,6 +14,7 @@ import Game2048 from './Game2048';
 import JigsawGame from './JigsawGame';
 import GameSelect from './GameSelect';
 import MagicPainter from './MagicPainter';
+import MusicBox from './MusicBox';
 import ProfileSelect from './ProfileSelect';
 import Album from './Album';
 import { listSessions } from './lib/galleryDb';
@@ -1011,6 +1012,11 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
             addXp(XP.gameBase);
           }}
         />
+      )}
+
+      {/* Musikbox: kein Minispiel, keine Münzen — steuert Spotify */}
+      {currentGame === 'musicbox' && (
+        <MusicBox onClose={() => handleGameEnd(0, false)} />
       )}
 
       {/* Header */}
