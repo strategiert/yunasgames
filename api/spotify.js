@@ -104,7 +104,7 @@ export default async function handler(req, res) {
         const query = String(q || '').trim().slice(0, 100);
         if (!query) return res.status(400).json({ error: 'Missing q' });
         const r = await sp(
-          `/search?q=${encodeURIComponent(query)}&type=album,track&limit=6&market=from_token`
+          `/search?q=${encodeURIComponent(query)}&type=album,track&limit=6&market=DE`
         );
         if (!r.ok) return fail(res, r);
         return res.json({ results: mapSearchResults(await r.json()) });
