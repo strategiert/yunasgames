@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { filterYunaPlaylists, pickDevice, mapStatus } from './_spotifyLib.js';
+import { filterYunaPlaylists, pickDevice, mapStatus, mapSearchResults } from './_spotifyLib.js';
 
 test('filterYunaPlaylists nimmt nur Yuna*-Playlists, case-insensitive', () => {
   const items = [
@@ -49,6 +49,22 @@ test('mapStatus mappt Player-Objekt', () => {
   assert.deepEqual(mapStatus(player), {
     device: 'Pixel 8', playing: true, track: 'Song A', artist: 'X, Y', volume: 60,
   });
+});
+
+test('mapSearchResults mischt Alben und Tracks, Alben zuerst', () => {
+  const data = {
+    albums: { items: [{ name: 'Hotzenplotz 1', uri: 'spotify:album:a1', artists: [{ name: 'Preußler' }], images: [{ url: 'http://img/a1' }] }] },
+    tracks: { items: [{ name: 'Song B', uri: 'spotify:track:t1', artists: [{ name: 'X' }], album: { images: [{ url: 'http://img/t1' }] } }] },
+  };
+  assert.deepEqual(mapSearchResults(data), [
+    { type: 'album', name: 'Hotzenplotz 1', artist: 'Preußler', image: 'http://img/a1', uri: 'spotify:album:a1' },
+    { type: 'track', name: 'Song B', artist: 'X', image: 'http://img/t1', uri: 'spotify:track:t1' },
+  ]);
+});
+
+test('mapSearchResults übersteht leere Antwort', () => {
+  assert.deepEqual(mapSearchResults({}), []);
+  assert.deepEqual(mapSearchResults(null), []);
 });
 
 test('mapStatus ohne Player/Device → device null', () => {

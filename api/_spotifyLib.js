@@ -23,6 +23,24 @@ export function pickDevice(devices) {
   );
 }
 
+export function mapSearchResults(data) {
+  const albums = (data?.albums?.items || []).filter(Boolean).map((a) => ({
+    type: 'album',
+    name: a.name,
+    artist: a.artists?.map((x) => x.name).join(', ') || null,
+    image: a.images?.[0]?.url || null,
+    uri: a.uri,
+  }));
+  const tracks = (data?.tracks?.items || []).filter(Boolean).map((t) => ({
+    type: 'track',
+    name: t.name,
+    artist: t.artists?.map((x) => x.name).join(', ') || null,
+    image: t.album?.images?.[0]?.url || null,
+    uri: t.uri,
+  }));
+  return [...albums, ...tracks];
+}
+
 export function mapStatus(player) {
   if (!player || !player.device) {
     return { device: null, playing: false, track: null, artist: null, volume: null };

@@ -113,14 +113,6 @@ const GameSelect = ({ onSelectGame, onClose }) => {
       color: 'from-violet-400 to-fuchsia-500',
       hasDifficulty: false,
     },
-    {
-      id: 'musicbox',
-      name: 'Musikbox',
-      emoji: '🎶',
-      description: 'Mach deine Lieblingsmusik an!',
-      color: 'from-emerald-400 to-teal-600',
-      hasDifficulty: false,
-    },
   ];
 
   const difficulties = [

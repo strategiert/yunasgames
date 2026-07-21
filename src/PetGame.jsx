@@ -207,6 +207,8 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
   const [posters, setPosters] = useState(initial.posters);
   const [posterUrl, setPosterUrl] = useState(null);
   const [showAlbum, setShowAlbum] = useState(false);
+  const [showMusicBox, setShowMusicBox] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
 
   useEffect(() => {
     let url = null;
@@ -1014,10 +1016,8 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
         />
       )}
 
-      {/* Musikbox: kein Minispiel, keine Münzen — steuert Spotify */}
-      {currentGame === 'musicbox' && (
-        <MusicBox onClose={() => handleGameEnd(0, false)} />
-      )}
+      {/* Musikbox: eigener Header-Button, kein Minispiel — steuert Spotify */}
+      {showMusicBox && <MusicBox onClose={() => setShowMusicBox(false)} />}
 
       {/* Header */}
       <div className={`flex justify-between items-center ${mobileDisplay ? 'mb-2' : 'mb-4'}`}>
@@ -1030,21 +1030,78 @@ const PetWorld = ({ profileId, initial, onSwitchProfile }) => {
           </div>
         </div>
         <div className={`flex ${mobileDisplay ? 'gap-1' : 'gap-2'}`}>
-          <button onClick={onSwitchProfile} title="Profil wechseln" className={`bg-white/50 rounded-full ${mobileDisplay ? 'text-lg p-1.5' : 'text-2xl p-2'}`}>👥</button>
-          <button onClick={() => setScreen('collar')} className={`bg-white/50 rounded-full ${mobileDisplay ? 'text-lg p-1.5' : 'text-2xl p-2'}`}>👔</button>
-          <button onClick={() => setScreen('shop')} className={`bg-white/50 rounded-full ${mobileDisplay ? 'text-lg p-1.5' : 'text-2xl p-2'}`}>🛒</button>
-          <button onClick={() => setShowAlbum(true)} title="Sammelalbum" className={`bg-white/50 rounded-full ${mobileDisplay ? 'text-lg p-1.5' : 'text-2xl p-2'}`}>📖</button>
-          <button onClick={toggleMute} title="Ton an/aus" className={`bg-white/50 rounded-full ${mobileDisplay ? 'text-lg p-1.5' : 'text-2xl p-2'}`}>{muted ? '🔇' : '🔊'}</button>
           <button
-            onClick={toggleMobileDisplay}
-            className={`rounded-full transition-colors ${mobileDisplay ? 'bg-green-400 text-base p-1.5' : 'bg-white/50 text-xl p-2'
-              }`}
-            title={mobileDisplay ? 'Mobile Ansicht an' : 'Mobile Ansicht aus'}
+            onClick={() => setShowMusicBox(true)}
+            title="Musikbox"
+            className={`bg-gradient-to-br from-emerald-400 to-teal-500 text-white rounded-full shadow ${mobileDisplay ? 'text-lg p-1.5' : 'text-2xl p-2'}`}
           >
-            📱
+            🎶
+          </button>
+          <button
+            onClick={() => setShowMenu(true)}
+            title="Menü"
+            className={`bg-white/50 rounded-full ${mobileDisplay ? 'text-lg p-1.5' : 'text-2xl p-2'}`}
+          >
+            ☰
           </button>
         </div>
       </div>
+
+      {/* Header-Menü mit Unterbereichen */}
+      {showMenu && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 flex justify-end"
+          onClick={(e) => e.target === e.currentTarget && setShowMenu(false)}
+        >
+          <div className="bg-white rounded-l-3xl shadow-2xl w-64 max-w-[80vw] h-full overflow-y-auto p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-bold text-lg text-gray-800">Menü</h3>
+              <button onClick={() => setShowMenu(false)} className="text-2xl text-gray-500">✕</button>
+            </div>
+            {[
+              {
+                section: 'Anziehen & Einkaufen',
+                items: [
+                  { icon: '👔', label: 'Styling', onClick: () => setScreen('collar') },
+                  { icon: '🛒', label: 'Shop', onClick: () => setScreen('shop') },
+                ],
+              },
+              {
+                section: 'Erinnerungen',
+                items: [{ icon: '📖', label: 'Sammelalbum', onClick: () => setShowAlbum(true) }],
+              },
+              {
+                section: 'Familie',
+                items: [{ icon: '👥', label: 'Profil wechseln', onClick: onSwitchProfile }],
+              },
+              {
+                section: 'Einstellungen',
+                items: [
+                  { icon: muted ? '🔇' : '🔊', label: muted ? 'Ton einschalten' : 'Ton ausschalten', onClick: toggleMute, keepOpen: true },
+                  { icon: '📱', label: mobileDisplay ? 'Mobile Ansicht aus' : 'Mobile Ansicht an', onClick: toggleMobileDisplay, keepOpen: true },
+                ],
+              },
+            ].map((group) => (
+              <div key={group.section} className="mb-3">
+                <div className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">{group.section}</div>
+                {group.items.map((item) => (
+                  <button
+                    key={item.label}
+                    onClick={() => {
+                      item.onClick();
+                      if (!item.keepOpen) setShowMenu(false);
+                    }}
+                    className="w-full flex items-center gap-3 py-2.5 px-2 rounded-xl hover:bg-gray-100 text-left"
+                  >
+                    <span className="text-2xl">{item.icon}</span>
+                    <span className="font-bold text-gray-700">{item.label}</span>
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Bedürfnisse als kompakte Chips — das Tier ist der Star, nicht die Balken */}
       <div className={`bg-white/80 rounded-2xl shadow-lg ${mobileDisplay ? 'p-2 mb-2' : 'p-3 mb-3'}`}>

@@ -1,6 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 
-const VERSION = 'musicbox-1';
+const VERSION = 'musicbox-2';
+
+const SpeechRec =
+  typeof window !== 'undefined'
+    ? window.SpeechRecognition || window.webkitSpeechRecognition
+    : null;
 
 async function api(action, params = {}) {
   const res = await fetch('/api/spotify', {
@@ -25,7 +30,12 @@ const MusicBox = ({ onClose }) => {
   const [busy, setBusy] = useState(false);
   const [debug, setDebug] = useState('');
   const [activeUri, setActiveUri] = useState(null);
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState(null); // null = keine Suche aktiv
+  const [searching, setSearching] = useState(false);
+  const [listening, setListening] = useState(false);
   const pollRef = useRef(null);
+  const recRef = useRef(null);
 
   const refreshStatus = useCallback(async () => {
     try {
@@ -71,6 +81,52 @@ const MusicBox = ({ onClose }) => {
     }
   };
 
+  const doSearch = async (text) => {
+    const qq = (text ?? query).trim();
+    if (!qq) return;
+    setSearching(true);
+    setDebug('');
+    try {
+      const d = await api('search', { q: qq });
+      setResults(d.results);
+    } catch (e) {
+      setDebug(`search: ${e.message} ${e.detail || ''}`);
+      setResults([]);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const startVoice = () => {
+    if (!SpeechRec) {
+      setDebug('Spracheingabe wird von diesem Browser nicht unterstützt.');
+      return;
+    }
+    if (listening) {
+      recRef.current?.stop();
+      return;
+    }
+    const rec = new SpeechRec();
+    recRef.current = rec;
+    rec.lang = 'de-DE';
+    rec.interimResults = false;
+    rec.maxAlternatives = 1;
+    rec.onresult = (ev) => {
+      const text = ev.results[0]?.[0]?.transcript || '';
+      setQuery(text);
+      if (text) doSearch(text);
+    };
+    rec.onerror = (ev) => {
+      setListening(false);
+      if (ev.error !== 'aborted' && ev.error !== 'no-speech') {
+        setDebug(`mikro: ${ev.error}`);
+      }
+    };
+    rec.onend = () => setListening(false);
+    setListening(true);
+    rec.start();
+  };
+
   const changeVolume = (delta) => {
     const current = status?.volume ?? 50;
     run('volume', { volume: Math.max(0, Math.min(100, current + delta)) });
@@ -91,6 +147,72 @@ const MusicBox = ({ onClose }) => {
           <div className="w-8" />
           <h2 className="text-2xl font-bold text-white drop-shadow-lg">🎶 Musikbox</h2>
           <button onClick={onClose} className="text-white text-2xl hover:scale-110 transition-transform">✕</button>
+        </div>
+
+        {/* Suche: Mikro groß, Textfeld als Fallback */}
+        <div className="mb-4">
+          <div className="flex gap-2 items-center">
+            <button
+              onClick={startVoice}
+              className={`shrink-0 rounded-full w-14 h-14 text-2xl shadow-lg transition-all
+                         ${listening ? 'bg-red-500 animate-pulse scale-110' : 'bg-white/25'}`}
+              title="Sprich den Namen von Lied oder Hörspiel"
+            >
+              🎤
+            </button>
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && doSearch()}
+              placeholder={listening ? 'Ich höre zu…' : 'Was willst du hören?'}
+              className="flex-1 min-w-0 rounded-full px-4 py-3 bg-white/90 text-teal-900 placeholder-teal-700/50 font-bold outline-none"
+            />
+            <button
+              onClick={() => doSearch()}
+              disabled={searching || !query.trim()}
+              className="shrink-0 bg-white/25 rounded-full w-12 h-12 text-xl disabled:opacity-40"
+            >
+              🔍
+            </button>
+          </div>
+
+          {searching && <p className="text-white/80 text-center text-sm mt-3">Suche…</p>}
+          {results?.length === 0 && !searching && (
+            <p className="text-white/80 text-center text-sm mt-3">Nichts gefunden — sag es nochmal!</p>
+          )}
+          {results?.length > 0 && (
+            <div className="mt-3 space-y-2">
+              {results.map((r) => (
+                <button
+                  key={r.uri}
+                  onClick={() => run('play', { uri: r.uri })}
+                  disabled={busy}
+                  className={`w-full flex items-center gap-3 bg-white/15 rounded-xl p-2 text-left
+                             hover:bg-white/25 transition-colors disabled:opacity-60
+                             ${activeUri === r.uri ? 'ring-2 ring-yellow-300' : ''}`}
+                >
+                  {r.image ? (
+                    <img src={r.image} alt="" className="w-12 h-12 rounded-lg object-cover shrink-0" />
+                  ) : (
+                    <div className="w-12 h-12 rounded-lg bg-white/10 flex items-center justify-center text-xl shrink-0">🎵</div>
+                  )}
+                  <div className="min-w-0">
+                    <div className="text-white font-bold text-sm truncate">{r.name}</div>
+                    <div className="text-white/70 text-xs truncate">
+                      {r.type === 'album' ? '💿 ' : '🎵 '}{r.artist}
+                    </div>
+                  </div>
+                </button>
+              ))}
+              <button
+                onClick={() => { setResults(null); setQuery(''); }}
+                className="w-full text-white/70 text-xs py-1"
+              >
+                Suche schließen
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Kein Device */}

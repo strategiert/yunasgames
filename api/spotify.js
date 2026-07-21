@@ -1,6 +1,6 @@
 export const config = { maxDuration: 15 };
 
-import { filterYunaPlaylists, pickDevice, mapStatus } from './_spotifyLib.js';
+import { filterYunaPlaylists, pickDevice, mapStatus, mapSearchResults } from './_spotifyLib.js';
 
 let cachedToken = null; // { token, expiresAt } — überlebt in warmer Instanz
 
@@ -67,7 +67,7 @@ export default async function handler(req, res) {
   for (const k of ['SPOTIFY_CLIENT_ID', 'SPOTIFY_CLIENT_SECRET', 'SPOTIFY_REFRESH_TOKEN']) {
     if (!process.env[k]) return res.status(500).json({ error: `${k} not configured` });
   }
-  const { action, uri, volume } = req.body || {};
+  const { action, uri, volume, q } = req.body || {};
   try {
     switch (action) {
       case 'playlists': {
@@ -87,12 +87,27 @@ export default async function handler(req, res) {
         if (!dr.ok) return fail(res, dr);
         const device = pickDevice((await dr.json()).devices);
         if (!device) return res.status(409).json({ error: 'no_device' });
+        // Einzeltracks brauchen uris:[], Playlists/Alben context_uri
+        const playBody = !uri
+          ? undefined
+          : uri.startsWith('spotify:track:')
+            ? { uris: [uri] }
+            : { context_uri: uri };
         const r = await sp(`/me/player/play?device_id=${encodeURIComponent(device.id)}`, {
           method: 'PUT',
-          body: uri ? { context_uri: uri } : undefined,
+          body: playBody,
         });
         if (!r.ok && r.status !== 204) return fail(res, r);
         return res.json({ ok: true, device: device.name });
+      }
+      case 'search': {
+        const query = String(q || '').trim().slice(0, 100);
+        if (!query) return res.status(400).json({ error: 'Missing q' });
+        const r = await sp(
+          `/search?q=${encodeURIComponent(query)}&type=album,track&limit=6&market=from_token`
+        );
+        if (!r.ok) return fail(res, r);
+        return res.json({ results: mapSearchResults(await r.json()) });
       }
       case 'pause': {
         const r = await sp('/me/player/pause', { method: 'PUT' });
