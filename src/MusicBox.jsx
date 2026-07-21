@@ -1,11 +1,30 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 
-const VERSION = 'musicbox-2';
+const VERSION = 'musicbox-3';
+const DEVICE_KEY = 'musicboxDevice-v1'; // {id, name} oder leer = nur Handy
 
 const SpeechRec =
   typeof window !== 'undefined'
     ? window.SpeechRecognition || window.webkitSpeechRecognition
     : null;
+
+const DEVICE_ICONS = {
+  Smartphone: '📱',
+  Computer: '💻',
+  Speaker: '🔊',
+  TV: '📺',
+  CastVideo: '📺',
+  CastAudio: '🔊',
+  AVR: '🔊',
+};
+
+function loadDevice() {
+  try {
+    return JSON.parse(localStorage.getItem(DEVICE_KEY)) || null;
+  } catch {
+    return null;
+  }
+}
 
 async function api(action, params = {}) {
   const res = await fetch('/api/spotify', {
@@ -28,31 +47,47 @@ const MusicBox = ({ onClose }) => {
   const [status, setStatus] = useState(null);
   const [noDevice, setNoDevice] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [debug, setDebug] = useState('');
+  const [errors, setErrors] = useState([]); // sticky, bis ✕
   const [activeUri, setActiveUri] = useState(null);
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState(null); // null = keine Suche aktiv
+  const [results, setResults] = useState(null);
   const [searching, setSearching] = useState(false);
   const [listening, setListening] = useState(false);
+  const [target, setTarget] = useState(loadDevice); // null = nur Handy
+  const [showDevices, setShowDevices] = useState(false);
+  const [devices, setDevices] = useState(null);
   const pollRef = useRef(null);
   const recRef = useRef(null);
 
+  const pushError = useCallback((msg) => {
+    const time = new Date().toLocaleTimeString('de-DE');
+    setErrors((prev) => [...prev.slice(-4), `${time} ${msg}`]);
+  }, []);
+
+  const dev = useCallback(
+    () => (target?.id ? { deviceId: target.id } : {}),
+    [target]
+  );
+
   const refreshStatus = useCallback(async () => {
     try {
-      const s = await api('status');
+      const s = await api('status', dev());
       setStatus(s);
     } catch (e) {
-      setDebug(`status: ${e.message} ${e.detail || ''}`);
+      pushError(`status: ${e.message} ${e.detail || ''}`);
     }
-  }, []);
+  }, [dev, pushError]);
 
   useEffect(() => {
     api('playlists')
       .then((d) => setPlaylists(d.playlists))
       .catch((e) => {
         setPlaylists([]);
-        setDebug(`playlists: ${e.message} ${e.detail || ''}`);
+        pushError(`playlists: ${e.message} ${e.detail || ''}`);
       });
+  }, [pushError]);
+
+  useEffect(() => {
     refreshStatus();
     pollRef.current = setInterval(refreshStatus, 5000);
     return () => clearInterval(pollRef.current);
@@ -61,9 +96,8 @@ const MusicBox = ({ onClose }) => {
   const run = async (action, params) => {
     if (busy) return;
     setBusy(true);
-    setDebug('');
     try {
-      const r = await api(action, params);
+      const r = await api(action, { ...dev(), ...params });
       if (action === 'play') {
         setNoDevice(false);
         setActiveUri(params?.uri || activeUri);
@@ -74,23 +108,45 @@ const MusicBox = ({ onClose }) => {
       if (e.code === 'no_device') {
         setNoDevice(true);
       } else {
-        setDebug(`${action}: ${e.message} ${e.detail || ''}`);
+        pushError(`${action}: ${e.message} ${e.detail || ''}`);
       }
     } finally {
       setBusy(false);
     }
   };
 
+  const openDevicePicker = async () => {
+    setShowDevices(true);
+    setDevices(null);
+    try {
+      const d = await api('devices');
+      setDevices(d.devices);
+    } catch (e) {
+      setDevices([]);
+      pushError(`devices: ${e.message} ${e.detail || ''}`);
+    }
+  };
+
+  const chooseDevice = (d) => {
+    // d = null → Kinder-Default "nur Handy"
+    setTarget(d);
+    try {
+      if (d) localStorage.setItem(DEVICE_KEY, JSON.stringify(d));
+      else localStorage.removeItem(DEVICE_KEY);
+    } catch { /* Speicher voll/privat — egal, gilt dann nur für diese Sitzung */ }
+    setShowDevices(false);
+    setNoDevice(false);
+  };
+
   const doSearch = async (text) => {
     const qq = (text ?? query).trim();
     if (!qq) return;
     setSearching(true);
-    setDebug('');
     try {
       const d = await api('search', { q: qq });
       setResults(d.results);
     } catch (e) {
-      setDebug(`search: ${e.message} ${e.detail || ''}`);
+      pushError(`search: ${e.message} ${e.detail || ''}`);
       setResults([]);
     } finally {
       setSearching(false);
@@ -99,7 +155,7 @@ const MusicBox = ({ onClose }) => {
 
   const startVoice = () => {
     if (!SpeechRec) {
-      setDebug('Spracheingabe wird von diesem Browser nicht unterstützt.');
+      pushError('Spracheingabe wird von diesem Browser nicht unterstützt.');
       return;
     }
     if (listening) {
@@ -119,7 +175,7 @@ const MusicBox = ({ onClose }) => {
     rec.onerror = (ev) => {
       setListening(false);
       if (ev.error !== 'aborted' && ev.error !== 'no-speech') {
-        setDebug(`mikro: ${ev.error}`);
+        pushError(`mikro: ${ev.error}`);
       }
     };
     rec.onend = () => setListening(false);
@@ -144,10 +200,52 @@ const MusicBox = ({ onClose }) => {
       <div className="bg-gradient-to-b from-emerald-400 to-teal-600 rounded-3xl p-5 max-w-sm w-full shadow-2xl max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
-          <div className="w-8" />
+          <button
+            onClick={openDevicePicker}
+            title="Gerät wählen"
+            className="text-white text-xl bg-white/20 rounded-full px-2.5 py-1.5 hover:scale-110 transition-transform"
+          >
+            {target ? DEVICE_ICONS[target.type] || '📻' : '📱'}
+          </button>
           <h2 className="text-2xl font-bold text-white drop-shadow-lg">🎶 Musikbox</h2>
           <button onClick={onClose} className="text-white text-2xl hover:scale-110 transition-transform">✕</button>
         </div>
+
+        {/* Geräte-Auswahl */}
+        {showDevices && (
+          <div className="bg-white/20 rounded-2xl p-3 mb-4 text-white">
+            <div className="font-bold text-sm mb-2">Wo soll die Musik spielen?</div>
+            <button
+              onClick={() => chooseDevice(null)}
+              className={`w-full flex items-center gap-2 rounded-xl p-2 text-left mb-1
+                         ${!target ? 'bg-yellow-300/30 ring-2 ring-yellow-300' : 'bg-white/15 hover:bg-white/25'}`}
+            >
+              <span className="text-xl">📱</span>
+              <span className="font-bold text-sm">Nur Handy (Standard)</span>
+            </button>
+            {devices === null && <p className="text-white/80 text-xs text-center py-2">Suche Geräte…</p>}
+            {devices?.length === 0 && (
+              <p className="text-white/80 text-xs text-center py-2">
+                Keine Geräte gefunden — Spotify irgendwo öffnen.
+              </p>
+            )}
+            {devices?.map((d) => (
+              <button
+                key={d.id}
+                onClick={() => chooseDevice(d)}
+                className={`w-full flex items-center gap-2 rounded-xl p-2 text-left mb-1
+                           ${target?.id === d.id ? 'bg-yellow-300/30 ring-2 ring-yellow-300' : 'bg-white/15 hover:bg-white/25'}`}
+              >
+                <span className="text-xl">{DEVICE_ICONS[d.type] || '📻'}</span>
+                <span className="font-bold text-sm truncate">{d.name}</span>
+                {d.active && <span className="ml-auto text-xs text-white/70">spielt</span>}
+              </button>
+            ))}
+            <button onClick={() => setShowDevices(false)} className="w-full text-white/70 text-xs py-1 mt-1">
+              Schließen
+            </button>
+          </div>
+        )}
 
         {/* Suche: Mikro groß, Textfeld als Fallback */}
         <div className="mb-4">
@@ -220,7 +318,9 @@ const MusicBox = ({ onClose }) => {
           <div className="bg-white/20 rounded-2xl p-4 mb-4 text-center text-white space-y-3">
             <div className="text-4xl">📻</div>
             <p className="font-bold">Spotify schläft noch!</p>
-            <p className="text-sm text-white/80">Einmal kurz Spotify öffnen, dann klappt es.</p>
+            <p className="text-sm text-white/80">
+              {target ? `${target.name} ist nicht erreichbar.` : 'Einmal kurz Spotify öffnen, dann klappt es.'}
+            </p>
             <a
               href="spotify://"
               className="block bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-full"
@@ -293,10 +393,16 @@ const MusicBox = ({ onClose }) => {
           </div>
         </div>
 
-        {/* Debug */}
-        {debug && (
-          <div className="mt-3 bg-black/40 rounded-lg p-2 text-[10px] text-white/70 break-all">
-            🐞 {VERSION} · {debug}
+        {/* Fehler-Log: sticky, bis ✕ gedrückt */}
+        {errors.length > 0 && (
+          <div className="mt-3 bg-black/40 rounded-lg p-2 text-[10px] text-white/70">
+            <div className="flex justify-between items-center mb-1">
+              <span>🐞 {VERSION}</span>
+              <button onClick={() => setErrors([])} className="text-white/70 px-1">✕</button>
+            </div>
+            {errors.map((e, i) => (
+              <div key={i} className="break-all">{e}</div>
+            ))}
           </div>
         )}
       </div>

@@ -1,6 +1,6 @@
 export const config = { maxDuration: 15 };
 
-import { filterYunaPlaylists, pickDevice, mapStatus, mapSearchResults, isPhonePlayer } from './_spotifyLib.js';
+import { filterYunaPlaylists, pickDevice, mapStatus, mapSearchResults, mapDevices, playerAllowed } from './_spotifyLib.js';
 
 let cachedToken = null; // { token, expiresAt } — überlebt in warmer Instanz
 
@@ -67,7 +67,7 @@ export default async function handler(req, res) {
   for (const k of ['SPOTIFY_CLIENT_ID', 'SPOTIFY_CLIENT_SECRET', 'SPOTIFY_REFRESH_TOKEN']) {
     if (!process.env[k]) return res.status(500).json({ error: `${k} not configured` });
   }
-  const { action, uri, volume, q } = req.body || {};
+  const { action, uri, volume, q, deviceId } = req.body || {};
   try {
     switch (action) {
       case 'playlists': {
@@ -81,16 +81,24 @@ export default async function handler(req, res) {
         if (r.status === 204) return res.json(mapStatus(null));
         if (!r.ok) return fail(res, r);
         const player = await r.json();
-        // Läuft Musik woanders (PC, Speaker), geht das die Musikbox nichts an
-        if (!isPhonePlayer(player)) {
+        // Läuft Musik auf einem nicht gewählten Gerät, nur als Hinweis zeigen
+        if (!playerAllowed(player, deviceId)) {
           return res.json({ ...mapStatus(null), elsewhere: player?.device?.name || null });
         }
         return res.json(mapStatus(player));
       }
+      case 'devices': {
+        const r = await sp('/me/player/devices');
+        if (!r.ok) return fail(res, r);
+        return res.json({ devices: mapDevices((await r.json()).devices) });
+      }
       case 'play': {
         const dr = await sp('/me/player/devices');
         if (!dr.ok) return fail(res, dr);
-        const device = pickDevice((await dr.json()).devices);
+        const all = (await dr.json()).devices || [];
+        const device = deviceId
+          ? all.find((d) => d && d.id === deviceId && !d.is_restricted) || null
+          : pickDevice(all);
         if (!device) return res.status(409).json({ error: 'no_device' });
         // Einzeltracks brauchen uris:[], Playlists/Alben context_uri
         const playBody = !uri
@@ -117,11 +125,11 @@ export default async function handler(req, res) {
       case 'pause':
       case 'next':
       case 'volume': {
-        // Steuerung nur, wenn gerade das Handy spielt — nie Papas PC fernsteuern
+        // Steuerung nur fürs gewählte Gerät (Default: nur Handy) — nie fremde Player kapern
         const pr = await sp('/me/player');
         if (pr.status === 204) return res.status(409).json({ error: 'no_device' });
         if (!pr.ok) return fail(res, pr);
-        if (!isPhonePlayer(await pr.json())) {
+        if (!playerAllowed(await pr.json(), deviceId)) {
           return res.status(409).json({ error: 'no_device' });
         }
         let r;

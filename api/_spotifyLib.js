@@ -24,6 +24,20 @@ export function isPhonePlayer(player) {
   return player?.device?.type === 'Smartphone';
 }
 
+export function mapDevices(devices) {
+  return (devices || [])
+    .filter((d) => d && !d.is_restricted)
+    .map((d) => ({ id: d.id, name: d.name, type: d.type, active: !!d.is_active }));
+}
+
+// Darf dieses Player-Objekt gesteuert/angezeigt werden?
+// Ohne deviceId gilt der Kinder-Default: nur Handy. Mit deviceId (Papa-Modus)
+// zählt exakt das gewählte Gerät.
+export function playerAllowed(player, deviceId) {
+  if (deviceId) return player?.device?.id === deviceId;
+  return isPhonePlayer(player);
+}
+
 export function mapSearchResults(data) {
   const albums = (data?.albums?.items || []).filter(Boolean).map((a) => ({
     type: 'album',
